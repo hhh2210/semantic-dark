@@ -1,0 +1,33 @@
+<!-- Original synthetic regression fixture authored for Semantic Dark. -->
+<svg class="semantic-flow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-label="A five-stage processing flow">
+  <style>
+    .semantic-flow text{font-family:ui-monospace,"SF Mono",Menlo,monospace;fill:#4A4F57;font-size:13px;font-weight:650;paint-order:stroke;stroke:#FFFFFF;stroke-width:4px;stroke-linejoin:round}
+    .semantic-flow .caption{font-family:system-ui,sans-serif;font-size:11px;font-weight:500;fill:#6B7079;stroke:none}
+    .semantic-flow .nodes rect{fill:#E8EEF4;stroke:#64748B;stroke-width:2px}
+    .semantic-flow .track{fill:none;stroke:#94A3B8;stroke-width:3px;stroke-linecap:round}
+  </style>
+  <rect x="1" y="1" width="638" height="218" rx="18" fill="#FFFFFF" stroke="#D8DEE6" stroke-width="2"/>
+  <path class="track" d="M72 111 H568"/>
+  <g aria-hidden="true">
+    <circle cx="72" cy="111" r="8" fill="#2E78B7"/>
+    <circle cx="196" cy="111" r="8" fill="#D39A24"/>
+    <circle cx="320" cy="111" r="8" fill="#6E9D48"/>
+    <circle cx="444" cy="111" r="8" fill="#9A65B8"/>
+    <circle cx="568" cy="111" r="8" fill="#C45E54"/>
+  </g>
+  <g class="nodes">
+    <rect x="36" y="48" width="72" height="34" rx="9"/>
+    <rect x="160" y="140" width="72" height="34" rx="9"/>
+    <rect x="284" y="48" width="72" height="34" rx="9"/>
+    <rect x="408" y="140" width="72" height="34" rx="9"/>
+    <rect x="532" y="48" width="72" height="34" rx="9"/>
+  </g>
+  <g class="labels" text-anchor="middle">
+    <text id="stage-label" x="72" y="70">collect</text>
+    <text x="196" y="162">parse</text>
+    <text x="320" y="70">route</text>
+    <text x="444" y="162">solve</text>
+    <text x="568" y="70">render</text>
+  </g>
+  <text class="caption" x="320" y="204" text-anchor="middle">synthetic semantic-paint regression</text>
+</svg>

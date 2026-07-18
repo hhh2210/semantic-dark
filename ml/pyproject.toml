@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "semantic-dark-ml"
+version = "0.1.0"
+description = "Reproducible corpus and tiny-CNN experiments for semantic dark-mode vision"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+corpus = [
+  "CairoSVG>=2.7,<3",
+  "Pillow>=10.4,<12",
+]
+train = [
+  "numpy>=1.26,<3",
+  "onnx>=1.16,<2",
+  "onnxscript>=0.1,<1",
+  "Pillow>=10.4,<12",
+  "torch>=2.3,<3",
+]
+dev = [
+  "pytest>=8.3,<9",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+semantic-dark-ml = "semantic_dark_ml.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/semantic_dark_ml"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

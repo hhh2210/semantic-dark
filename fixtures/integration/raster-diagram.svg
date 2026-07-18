@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="280" viewBox="0 0 640 280">
+  <rect width="640" height="280" fill="#fafafa"/>
+  <g stroke="#344054" stroke-width="3" fill="none">
+    <path d="M72 36V230H600"/>
+    <path d="M72 182H600M72 134H600M72 86H600" opacity=".22"/>
+  </g>
+  <g fill="#155eef">
+    <rect x="112" y="126" width="54" height="104"/>
+    <rect x="206" y="82" width="54" height="148"/>
+  </g>
+  <g fill="#f79009">
+    <rect x="300" y="151" width="54" height="79"/>
+    <rect x="394" y="62" width="54" height="168"/>
+  </g>
+  <g fill="#12b76a">
+    <rect x="488" y="105" width="54" height="125"/>
+  </g>
+  <g fill="#344054" font-family="system-ui,sans-serif" font-size="18">
+    <text x="72" y="260">A</text><text x="188" y="260">B</text>
+    <text x="282" y="260">C</text><text x="376" y="260">D</text>
+    <text x="470" y="260">E</text><text x="20" y="42">100</text>
+  </g>
+</svg>

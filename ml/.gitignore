@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.onnx
+*.pt
+*.pth
+predictions.jsonl
+corpus/
+artifacts/

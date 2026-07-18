@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="popup.css">
+    <title>Semantic Dark</title>
+  </head>
+  <body>
+    <main id="popup" class="popup" aria-busy="true">
+      <header class="header">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M18.3 15.8A7.7 7.7 0 0 1 8.2 5.7 7.8 7.8 0 1 0 18.3 15.8Z" />
+          </svg>
+        </span>
+        <span class="heading-copy">
+          <h1>Semantic Dark</h1>
+          <span id="host" class="host">Checking current tab…</span>
+        </span>
+        <span id="site-state" class="badge" data-state="checking" role="status">
+          Checking
+        </span>
+      </header>
+
+      <section class="panel activation-panel" aria-labelledby="enabled-label">
+        <label class="switch-row" for="enabled">
+          <span class="control-copy">
+            <span id="enabled-label" class="control-title">Darken this site</span>
+            <span id="enabled-hint" class="control-hint">Apply only when the page needs it</span>
+          </span>
+          <span class="switch-control">
+            <input
+              id="enabled"
+              type="checkbox"
+              role="switch"
+              aria-labelledby="enabled-label"
+              aria-describedby="enabled-hint site-note"
+              disabled
+            >
+            <span class="switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <div id="site-note-row" class="site-note-row" hidden>
+          <p id="site-note" class="site-note"></p>
+          <button id="reset-mode" class="text-button" type="button" hidden>
+            Use automatic behavior
+          </button>
+        </div>
+      </section>
+
+      <fieldset id="appearance" class="panel appearance" disabled>
+        <legend>Appearance</legend>
+        <label class="setting-row" for="background">
+          <span>Background</span>
+          <input id="background" type="color" value="#111416">
+        </label>
+        <div class="setting-block">
+          <div class="setting-heading">
+            <label for="contrast">Minimum text contrast</label>
+            <output id="contrast-value" for="contrast" aria-live="off">4.5:1</output>
+          </div>
+          <input
+            id="contrast"
+            type="range"
+            min="4.5"
+            max="9"
+            step="0.1"
+            value="4.5"
+            aria-valuetext="4.5 to 1"
+          >
+        </div>
+      </fieldset>
+
+      <p id="error" class="error" role="alert" hidden></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

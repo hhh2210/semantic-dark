@@ -1,0 +1,55 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.14.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - name: Locate system Chrome
+        id: chrome
+        shell: bash
+        run: |
+          chrome="$(command -v google-chrome || command -v google-chrome-stable)"
+          test -n "$chrome"
+          echo "path=$chrome" >> "$GITHUB_OUTPUT"
+      - name: Run extension E2E
+        run: pnpm e2e
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.path }}
+      - name: Upload E2E diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: semantic-dark-e2e
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --project ml --extra corpus --extra dev --locked
+      - run: uv run --project ml pytest
+      - run: uv run --project ml ruff check ml/src ml/tests

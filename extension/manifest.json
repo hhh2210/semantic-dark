@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Semantic Dark",
+  "description": "Constraint-based dark mode with semantic SVG handling and local visual classification.",
+  "version": "0.3.0",
+  "minimum_chrome_version": "120",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "web_accessible_resources": [
+    {
+      "resources": ["raster-worker-host.html"],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ],
+  "background": {"service_worker": "service-worker.js"},
+  "action": {
+    "default_title": "Semantic Dark",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "css": ["prepaint.css"],
+      "js": ["main-world.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_origin_as_fallback": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_origin_as_fallback": true,
+      "world": "ISOLATED"
+    }
+  ]
+}

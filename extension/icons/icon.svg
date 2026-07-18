@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Semantic Dark crescent">
+  <defs>
+    <linearGradient id="tile" x1="20" y1="14" x2="108" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2F9BFF" />
+      <stop offset="1" stop-color="#0062C7" />
+    </linearGradient>
+    <mask id="crescent">
+      <rect width="128" height="128" fill="black" />
+      <circle cx="59" cy="65" r="34" fill="white" />
+      <circle cx="77" cy="48" r="34" fill="black" />
+    </mask>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="27" fill="url(#tile)" />
+  <circle cx="59" cy="65" r="34" fill="#FFFFFF" mask="url(#crescent)" />
+</svg>

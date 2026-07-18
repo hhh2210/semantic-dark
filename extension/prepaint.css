@@ -1,0 +1,17 @@
+:root[data-semantic-dark-active] {
+  color-scheme: dark !important;
+  background-color: #111416 !important;
+}
+
+:root[data-semantic-dark-probing],
+:root[data-semantic-dark-probing] *,
+:root[data-semantic-dark-probing] *::before,
+:root[data-semantic-dark-probing] *::after {
+  transition: none !important;
+}
+
+:root[data-semantic-dark-active] img,
+:root[data-semantic-dark-active] video,
+:root[data-semantic-dark-active] canvas {
+  color-scheme: normal;
+}

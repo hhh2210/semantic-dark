@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Semantic Dark integration fixture</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/fixture.css">
+  </head>
+  <body>
+    <main class="page-shell">
+      <section id="dom-card" class="card prose-card">
+        <p class="eyebrow">Ordinary DOM fixture</p>
+        <h1 id="dom-title">Semantic dark mode should remain readable</h1>
+        <p id="dom-copy">
+          This card starts with a white surface, dark text, and a visible border.
+          The extension should map each role instead of applying one global filter.
+        </p>
+        <a id="dom-link" href="#semantic-halo-figure">Inspect the inline SVG</a>
+      </section>
+
+      <section class="card svg-card" aria-labelledby="svg-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Text-halo regression fixture</p>
+            <h2 id="svg-title">Inline SVG text halo</h2>
+          </div>
+          <img
+            id="vision-icon"
+            src="/icon.svg"
+            width="64"
+            height="64"
+            alt="Transparent monochrome chain icon used by the visual classifier"
+          >
+        </div>
+
+        <svg
+          id="semantic-halo-figure"
+          class="chainfig"
+          viewBox="0 0 880 300"
+          role="img"
+          aria-labelledby="figure-title figure-description"
+        >
+          <title id="figure-title">Distributed reinforcement-learning chain</title>
+          <desc id="figure-description">
+            A synthetic diagram that combines dark text with a light background halo.
+          </desc>
+          <rect class="canvas" x="1" y="1" width="878" height="298" rx="18" />
+
+          <g class="track" aria-hidden="true">
+            <path d="M92 150 H788" />
+            <circle cx="150" cy="150" r="20" />
+            <circle cx="310" cy="150" r="20" />
+            <circle cx="470" cy="150" r="20" />
+            <circle cx="630" cy="150" r="20" />
+            <circle cx="788" cy="150" r="20" />
+          </g>
+
+          <g class="nodes">
+            <rect x="88" y="54" width="124" height="58" rx="10" />
+            <rect x="248" y="188" width="124" height="58" rx="10" />
+            <rect x="408" y="54" width="124" height="58" rx="10" />
+            <rect x="568" y="188" width="124" height="58" rx="10" />
+            <rect x="728" y="54" width="100" height="58" rx="10" />
+          </g>
+
+          <g class="labels">
+            <text id="halo-text" x="150" y="88" text-anchor="middle">policy</text>
+            <text x="310" y="222" text-anchor="middle">rollout</text>
+            <text x="470" y="88" text-anchor="middle">reward</text>
+            <text x="630" y="222" text-anchor="middle">update</text>
+            <text x="778" y="88" text-anchor="middle">sync</text>
+          </g>
+        </svg>
+        <h3>Raster diagram route</h3>
+        <img
+          id="vision-diagram"
+          class="raster-diagram"
+          src="/raster-diagram.svg"
+          width="640"
+          height="280"
+          alt="Light-background bar chart used to exercise raster palette remapping"
+        >
+      </section>
+
+      <section class="card benchmark-card" aria-labelledby="benchmark-title">
+        <p class="eyebrow">Inkling regression fixture</p>
+        <h2 id="benchmark-title">Gradient-backed table category</h2>
+        <table class="benchmark-table">
+          <tbody>
+            <tr class="benchmark-category-row">
+              <th id="benchmark-category" class="benchmark-category-label" scope="row">Audio</th>
+              <td class="benchmark-category-cell"></td>
+              <td class="benchmark-category-cell"></td>
+            </tr>
+            <tr>
+              <th scope="row">Audio MC</th>
+              <td>56.6%</td>
+              <td>66.8%</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

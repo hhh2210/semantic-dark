@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Native dark integration fixture</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/native-dark.css">
+    <script>
+      globalThis.nativeInitialState = {
+        semanticDarkActive: document.documentElement.hasAttribute('data-semantic-dark-active'),
+      };
+    </script>
+  </head>
+  <body>
+    <main id="native-dark-canvas">
+      <article id="native-dark-card">
+        <span id="animation-probe" aria-hidden="true"></span>
+        <p>Native site theme</p>
+        <h1>This page already provides a dark appearance</h1>
+        <p>Semantic Dark should leave every authored color and element untouched.</p>
+      </article>
+    </main>
+  </body>
+</html>
