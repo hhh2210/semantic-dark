@@ -13,6 +13,7 @@ import {
 } from '../artifacts';
 import {collectPaintObservations} from './collector';
 import {evaluatePairedThemeSystem} from './evaluate';
+import type {ExposureClaim} from './metric-freeze';
 import {buildObservationMatrix, REQUIRED_OBSERVATION_VARIANTS} from './observations';
 import {loadPairedThemeProtocol} from './protocol';
 import {
@@ -37,6 +38,8 @@ export interface PairedThemeRunOptions {
   chromePath?: string;
   headless?: boolean;
   requireClean?: boolean;
+  metricFreezeCommit?: string;
+  heldOutClaim?: ExposureClaim;
 }
 
 export interface PairedThemeRunResult {
@@ -72,16 +75,26 @@ export async function runPairedTheme(
 ): Promise<PairedThemeRunResult> {
   const repoRoot = path.resolve(options.repoRoot ?? process.cwd());
   const output = await prepareScratchOutput(options.output, 'Paired-theme');
-  const loaded = await loadPairedThemeProtocol(path.resolve(repoRoot, options.protocolPath));
+  const loaded = await loadPairedThemeProtocol(
+    path.resolve(repoRoot, options.protocolPath), repoRoot,
+  );
+  const git = await gitIdentity(repoRoot);
+  const requireClean = options.requireClean !== false;
+  if (requireClean && !git.clean) throw new Error('Final paired-theme runs require a clean worktree');
+  const m0 = await loadM0Identity(repoRoot);
+  if (loaded.protocol.split === 'held-out') {
+    const claim = options.heldOutClaim;
+    if (!claim || claim.receipt.metricSpecSha256 !== loaded.metricSpecSha256 ||
+        claim.receipt.freezeCommit !== options.metricFreezeCommit ||
+        claim.receipt.systems.join('/') !== 'carbon/fluent') {
+      throw new Error('Held-out source access requires the combined exposure claim');
+    }
+  }
   const {theme, normalizedTokensSha256} = resolvePairedThemeSource(loaded.protocol.source);
   if (theme.split !== loaded.protocol.split) {
     throw new Error(`Theme split ${theme.split} does not match protocol split ${loaded.protocol.split}`);
   }
   const variants = buildThemeVariantValues(theme, loaded.scenes.scenes);
-  const git = await gitIdentity(repoRoot);
-  const requireClean = options.requireClean !== false;
-  if (requireClean && !git.clean) throw new Error('Final paired-theme runs require a clean worktree');
-  const m0 = await loadM0Identity(repoRoot);
   const protocolSha256 = await sha256File(loaded.protocolPath);
   const sceneManifestSha256 = await sha256File(loaded.sceneManifestPath);
   const common = {
@@ -93,6 +106,9 @@ export async function runPairedTheme(
     normalizedTokensSha256,
     evaluatorCommit: git.commit,
     worktreeClean: git.clean,
+    metricSpecId: loaded.metricSpec.id,
+    metricSpecSha256: loaded.metricSpecSha256,
+    metricFreezeCommit: options.metricFreezeCommit ?? git.commit,
     m0,
   };
   const runA = await runOnce('run-a', output, loaded, theme, variants.values, common);
@@ -124,7 +140,8 @@ async function runOnce(
   common: {
     repoRoot: string; chromePath: string; headless: boolean; protocolSha256: string;
     sceneManifestSha256: string; normalizedTokensSha256: string; evaluatorCommit: string;
-    worktreeClean: boolean; m0: M0Identity;
+    worktreeClean: boolean; metricSpecId: string; metricSpecSha256: string;
+    metricFreezeCommit: string; m0: M0Identity;
   },
 ) {
   const runOutput = path.join(output, runName);
@@ -164,7 +181,7 @@ async function runOnce(
     system: theme.system, split: theme.split,
     scenes: loaded.scenes.scenes, observations,
   });
-  const evaluation = evaluatePairedThemeSystem(matrix, loaded.scenes.scenes, loaded.protocol.metric);
+  const evaluation = evaluatePairedThemeSystem(matrix, loaded.scenes.scenes, loaded.metric);
   assertCommonDenominators(evaluation.counts);
   const recordIds = [...evaluation.rows.color, ...evaluation.rows.contrast, ...evaluation.rows.rank]
     .map((row) => row.id).sort();
@@ -184,6 +201,9 @@ async function runOnce(
     recordIdsSha256,
     metricPayloadSha256,
     baselineEngineCommit: common.m0.baselineEngineCommit,
+    metricSpecId: common.metricSpecId,
+    metricSpecSha256: common.metricSpecSha256,
+    metricFreezeCommit: common.metricFreezeCommit,
     roleProfilesSourceSha256: common.m0.roleProfilesSourceSha256,
     roleProfilesCanonicalSha256: common.m0.roleProfilesCanonicalSha256,
     source: theme.source,

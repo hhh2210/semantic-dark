@@ -119,17 +119,23 @@ export interface PairedThemeMetricConfig {
   };
 }
 
+export interface FrozenMetricSpecReference {
+  id: 'semantic-dark.paired-theme-metric.v1';
+  path: '../evaluation/metric-spec.v1.json';
+  sha256: string;
+}
+
 export interface PairedThemeProtocol {
   schema: 'semantic-dark.paired-theme-protocol.v1';
   id: string;
   split: EvaluationSplit;
-  source: DevelopmentProtocolSource;
+  source: PairedThemeProtocolSource;
   sceneManifest: string;
   viewport: {width: number; height: number; deviceScaleFactor: number};
   locale: string;
   colorProfile: 'srgb';
   limits: {maxScenes: number; maxReviewedDecisions: number};
-  metric: PairedThemeMetricConfig;
+  metricSpec: FrozenMetricSpecReference;
 }
 
 export interface PaintDecision {

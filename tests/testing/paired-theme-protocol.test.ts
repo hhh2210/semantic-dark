@@ -8,9 +8,13 @@ import {
   validateSceneManifest,
 } from '../../src/testing/paired-theme/protocol';
 import type {SceneDefinition} from '../../src/testing/paired-theme/types';
+import carbonProtocol from '../../fixtures/paired-theme/carbon-v1.protocol.json';
+import fluentProtocol from '../../fixtures/paired-theme/fluent-v1.protocol.json';
 import spectrumProtocol from '../../fixtures/paired-theme/spectrum-v1.protocol.json';
 
 const limits = {maxScenes: 24, maxReviewedDecisions: 50};
+const metricSpec = {id: 'semantic-dark.paired-theme-metric.v1',
+  path: '../evaluation/metric-spec.v1.json', sha256: 'a'.repeat(64)};
 const materialSource = {
   system: 'material', kind: 'generated-scheme',
   package: {
@@ -59,23 +63,12 @@ describe('paired-theme protocol validation', () => {
       locale: 'en-US',
       colorProfile: 'srgb',
       limits,
-      metric: {
-        status: 'development-draft',
-        deltaEOkCap: 0.1,
-        contrastLog2Cap: 1,
-        rankTieEpsilon: 0.01,
-        comparisonEpsilon: 1e-7,
-        accentChromaThreshold: 0.02,
-        textContrastFloor: 4.5,
-        nonTextContrastFloor: 3,
-        surfaceSeparationFloor: 1.12,
-        componentWeights: {color: 1 / 3, contrast: 1 / 3, rank: 1 / 3},
-      },
+      metricSpec,
     });
     expect(protocol.source.system).toBe('material');
   });
 
-  it('rejects held-out access and oversized protocols in M1a', () => {
+  it('enforces source-family splits and protocol ceilings', () => {
     const base = {
       schema: 'semantic-dark.paired-theme-protocol.v1',
       id: 'bad',
@@ -84,21 +77,10 @@ describe('paired-theme protocol validation', () => {
       viewport: {width: 1280, height: 900, deviceScaleFactor: 1},
       locale: 'en-US',
       colorProfile: 'srgb',
-      metric: {
-        status: 'development-draft',
-        deltaEOkCap: 0.1,
-        contrastLog2Cap: 1,
-        rankTieEpsilon: 0.01,
-        comparisonEpsilon: 1e-7,
-        accentChromaThreshold: 0.02,
-        textContrastFloor: 4.5,
-        nonTextContrastFloor: 3,
-        surfaceSeparationFloor: 1.12,
-        componentWeights: {color: 1 / 3, contrast: 1 / 3, rank: 1 / 3},
-      },
+      metricSpec,
     };
     expect(() => validateProtocol({...base, split: 'held-out', limits})).toThrow(
-      'development protocols only',
+      /does not belong to split/,
     );
     expect(() => validateProtocol({
       ...base,
@@ -113,12 +95,7 @@ describe('paired-theme protocol validation', () => {
       split: 'development', source: primerSource, sceneManifest: './scenes.json',
       viewport: {width: 1280, height: 900, deviceScaleFactor: 1}, locale: 'en-US',
       colorProfile: 'srgb', limits,
-      metric: {
-        status: 'development-draft', deltaEOkCap: 0.1, contrastLog2Cap: 1,
-        rankTieEpsilon: 0.01, comparisonEpsilon: 1e-7, accentChromaThreshold: 0.02,
-        textContrastFloor: 4.5, nonTextContrastFloor: 3, surfaceSeparationFloor: 1.12,
-        componentWeights: {color: 1 / 3, contrast: 1 / 3, rank: 1 / 3},
-      },
+      metricSpec,
     });
     expect(protocol.source.system).toBe('primer');
     expect(() => validateProtocol({...protocol, source: {...primerSource,
@@ -142,26 +119,33 @@ describe('paired-theme protocol validation', () => {
     }})).toThrow(/schema contract/);
   });
 
+  it('accepts only the preregistered Carbon and Fluent held-out contracts', () => {
+    expect(validateProtocol(carbonProtocol).source.system).toBe('carbon');
+    expect(validateProtocol(fluentProtocol).source.system).toBe('fluent');
+    expect(() => validateProtocol({...carbonProtocol, split: 'development'})).toThrow(
+      /does not belong to split/,
+    );
+    expect(() => validateProtocol({...fluentProtocol, source: {
+      ...fluentProtocol.source,
+      tokens: {...fluentProtocol.source.tokens, focus: 'outcomeSelectedToken'},
+    }})).toThrow(/token selectors/);
+  });
+
   it('resolves the scene manifest relative to the protocol and blocks path escape', async () => {
+    const loaded = await loadPairedThemeProtocol(
+      path.resolve('fixtures/paired-theme/material-v1.protocol.json'), process.cwd(),
+    );
+    expect(loaded.sceneManifestPath).toBe(path.resolve('fixtures/paired-theme/common-scenes.v1.json'));
     const directory = await mkdtemp(path.join(tmpdir(), 'paired-theme-protocol-'));
     try {
-      const scenePath = path.join(directory, 'scenes.json');
       const protocolPath = path.join(directory, 'protocol.json');
-      await writeFile(scenePath, JSON.stringify({
-        schema: 'semantic-dark.paired-theme-scenes.v1', scenes: [scene()],
-      }));
       const protocol = {
         schema: 'semantic-dark.paired-theme-protocol.v1', id: 'relative',
         split: 'development', source: materialSource, sceneManifest: './scenes.json',
         viewport: {width: 100, height: 100, deviceScaleFactor: 1}, locale: 'en-US',
         colorProfile: 'srgb', limits,
-        metric: {status: 'development-draft', deltaEOkCap: 0.1, contrastLog2Cap: 1,
-          rankTieEpsilon: 0.01, comparisonEpsilon: 1e-7, accentChromaThreshold: 0.02,
-          textContrastFloor: 4.5, nonTextContrastFloor: 3, surfaceSeparationFloor: 1.12,
-          componentWeights: {color: 1 / 3, contrast: 1 / 3, rank: 1 / 3}},
+        metricSpec,
       };
-      await writeFile(protocolPath, JSON.stringify(protocol));
-      expect((await loadPairedThemeProtocol(protocolPath)).sceneManifestPath).toBe(scenePath);
       await writeFile(protocolPath, JSON.stringify({...protocol, sceneManifest: '../escape.json'}));
       await expect(loadPairedThemeProtocol(protocolPath)).rejects.toThrow(/stay inside/);
     } finally {

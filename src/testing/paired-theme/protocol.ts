@@ -1,6 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
-import {NORMALIZED_TOKEN_NAMES, type PaintDecision, type PairedThemeProtocol, type SceneDefinition, type SceneManifest} from './types';
+import {loadFrozenMetricSpecFile, type FrozenMetricSpec} from './metric-freeze';
+import {NORMALIZED_TOKEN_NAMES, type PaintDecision, type PairedThemeMetricConfig, type PairedThemeProtocol, type SceneDefinition, type SceneManifest} from './types';
 import {validateProtocolSource} from './protocol-source';
 
 const ROLES = new Set(['background', 'surface', 'text', 'border', 'accent', 'svgFill', 'svgStroke']);
@@ -15,9 +16,16 @@ export interface LoadedPairedThemeProtocol {
   scenes: SceneManifest;
   protocolPath: string;
   sceneManifestPath: string;
+  metricSpecPath: string;
+  metricSpecSha256: string;
+  metricSpec: FrozenMetricSpec;
+  metric: PairedThemeMetricConfig;
 }
 
-export async function loadPairedThemeProtocol(protocolValue: string): Promise<LoadedPairedThemeProtocol> {
+export async function loadPairedThemeProtocol(
+  protocolValue: string,
+  repoRootValue = process.cwd(),
+): Promise<LoadedPairedThemeProtocol> {
   const protocolPath = path.resolve(protocolValue);
   const protocol = validateProtocol(JSON.parse(await readFile(protocolPath, 'utf8')));
   const protocolDirectory = path.dirname(protocolPath);
@@ -30,39 +38,41 @@ export async function loadPairedThemeProtocol(protocolValue: string): Promise<Lo
     JSON.parse(await readFile(sceneManifestPath, 'utf8')),
     protocol.limits,
   );
-  return {protocol, scenes, protocolPath, sceneManifestPath};
+  const metricSpecPath = path.resolve(protocolDirectory, protocol.metricSpec.path);
+  const repoRoot = path.resolve(repoRootValue);
+  const frozen = await loadFrozenMetricSpecFile(
+    path.relative(repoRoot, metricSpecPath), protocol.metricSpec.sha256, repoRoot,
+  );
+  if (frozen.spec.id !== protocol.metricSpec.id) throw new Error('Metric spec id mismatch');
+  return {protocol, scenes, protocolPath, sceneManifestPath, metricSpecPath,
+    metricSpecSha256: frozen.sha256, metricSpec: frozen.spec, metric: frozen.config};
 }
 
 export function validateProtocol(value: unknown): PairedThemeProtocol {
   const input = object(value, 'protocol');
+  exactKeys(input, ['schema', 'id', 'split', 'source', 'sceneManifest', 'viewport', 'locale',
+    'colorProfile', 'limits', 'metricSpec'], 'protocol');
   if (input.schema !== 'semantic-dark.paired-theme-protocol.v1') {
     throw new Error('Unsupported paired-theme protocol schema');
   }
-  if (input.split !== 'development') throw new Error('M1a accepts development protocols only');
+  if (input.split !== 'development' && input.split !== 'held-out') {
+    throw new Error('Paired-theme split must be development or held-out');
+  }
   validateProtocolSource(input.source);
+  const source = object(input.source, 'protocol.source');
+  const development = source.system === 'material' || source.system === 'primer' ||
+    source.system === 'spectrum';
+  if ((input.split === 'development') !== development) {
+    throw new Error(`Source ${String(source.system)} does not belong to split ${input.split}`);
+  }
   const viewport = object(input.viewport, 'protocol.viewport');
   const limits = object(input.limits, 'protocol.limits');
-  const metric = object(input.metric, 'protocol.metric');
-  const weights = object(metric.componentWeights, 'protocol.metric.componentWeights');
-  const weightSum = number(weights.color, 'color weight') +
-    number(weights.contrast, 'contrast weight') + number(weights.rank, 'rank weight');
-  if (Math.abs(weightSum - 1) > 1e-12) throw new Error('Metric component weights must sum to one');
-  if (metric.status !== 'development-draft' && metric.status !== 'frozen-v1') {
-    throw new Error('Metric status must be development-draft or frozen-v1');
-  }
-  for (const [name, value] of [
-    ['deltaEOkCap', metric.deltaEOkCap],
-    ['contrastLog2Cap', metric.contrastLog2Cap],
-    ['rankTieEpsilon', metric.rankTieEpsilon],
-    ['comparisonEpsilon', metric.comparisonEpsilon],
-    ['textContrastFloor', metric.textContrastFloor],
-    ['nonTextContrastFloor', metric.nonTextContrastFloor],
-    ['surfaceSeparationFloor', metric.surfaceSeparationFloor],
-  ] as const) {
-    if (number(value, name) <= 0) throw new Error(`${name} must be positive`);
-  }
-  if (number(metric.accentChromaThreshold, 'accentChromaThreshold') < 0) {
-    throw new Error('accentChromaThreshold must be nonnegative');
+  const metricSpec = object(input.metricSpec, 'protocol.metricSpec');
+  exactKeys(metricSpec, ['id', 'path', 'sha256'], 'protocol.metricSpec');
+  if (metricSpec.id !== 'semantic-dark.paired-theme-metric.v1' ||
+      metricSpec.path !== '../evaluation/metric-spec.v1.json' ||
+      typeof metricSpec.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(metricSpec.sha256)) {
+    throw new Error('Protocol metric spec reference differs from the frozen contract');
   }
   const protocol = input as unknown as PairedThemeProtocol;
   if (!protocol.id || !protocol.sceneManifest || protocol.colorProfile !== 'srgb') {
@@ -179,6 +189,14 @@ function object(value: unknown, label: string): Record<string, unknown> {
     throw new TypeError(`${label} must be an object`);
   }
   return value as Record<string, unknown>;
+}
+
+function exactKeys(value: Record<string, unknown>, expected: readonly string[], label: string): void {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
+    throw new Error(`${label} has an unexpected shape`);
+  }
 }
 
 function number(value: unknown, label: string): number {

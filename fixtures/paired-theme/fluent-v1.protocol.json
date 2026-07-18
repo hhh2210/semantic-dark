@@ -1,0 +1,37 @@
+{
+  "schema": "semantic-dark.paired-theme-protocol.v1",
+  "id": "fluent-react-theme-9.2.1-web-v1",
+  "split": "held-out",
+  "source": {
+    "system": "fluent",
+    "kind": "exported-theme-object",
+    "package": {
+      "name": "@fluentui/react-theme",
+      "version": "9.2.1",
+      "integrity": "sha512-lJxfz7LmmglFz+c9C41qmMqaRRZZUPtPPl9DWQ79vH+JwZd4dkN7eA78OTRwcGCOTPEKoLTX72R+EFaWEDlX+w==",
+      "license": "MIT",
+      "repository": "https://github.com/microsoft/fluentui"
+    },
+    "lightExport": "webLightTheme",
+    "darkExport": "webDarkTheme",
+    "tokens": {
+      "canvas": "colorNeutralBackground1",
+      "surface": "colorNeutralBackground2",
+      "surfaceRaised": "colorNeutralBackground3",
+      "textPrimary": "colorNeutralForeground1",
+      "textSecondary": "colorNeutralForeground2",
+      "tableHeader": "colorNeutralBackground3",
+      "selectedSurface": "colorSubtleBackgroundSelected",
+      "border": "colorNeutralStroke1",
+      "focus": "colorStrokeFocus2",
+      "dangerSurface": "colorPaletteRedBackground1",
+      "dangerText": "colorNeutralForeground1"
+    }
+  },
+  "sceneManifest": "./common-scenes.v1.json",
+  "viewport": {"width": 1280, "height": 900, "deviceScaleFactor": 1},
+  "locale": "en-US",
+  "colorProfile": "srgb",
+  "limits": {"maxScenes": 24, "maxReviewedDecisions": 50},
+  "metricSpec": {"id": "semantic-dark.paired-theme-metric.v1", "path": "../evaluation/metric-spec.v1.json", "sha256": "3cdc696270917f080e1c8d7cbcd5954dc50b31b598205b0204fe2be48168089d"}
+}

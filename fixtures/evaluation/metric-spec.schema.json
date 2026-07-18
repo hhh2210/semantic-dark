@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://semantic-dark.local/schemas/metric-spec.v1.json",
+  "title": "Semantic Dark paired-theme metric freeze",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema", "id", "version", "status", "baseline", "sources", "records", "colorPipeline", "primary", "secondary", "safety", "m2Gate", "reportContract", "implementationPins", "heldOutAccessPolicy"],
+  "properties": {
+    "$schema": {"const": "./metric-spec.schema.json"},
+    "schema": {"const": "semantic-dark.paired-theme-metric-spec.v1"},
+    "id": {"const": "semantic-dark.paired-theme-metric.v1"},
+    "version": {"const": 1},
+    "status": {"const": "frozen"},
+    "baseline": {
+      "type": "object", "additionalProperties": false,
+      "required": ["m0Manifest", "m0ManifestSha256", "engineCommit", "roleProfilesSource", "roleProfilesSourceSha256", "roleProfilesCanonicalSha256"],
+      "properties": {
+        "m0Manifest": {"const": "fixtures/evaluation/m0-manifest.v1.json"},
+        "m0ManifestSha256": {"$ref": "#/$defs/sha256"},
+        "engineCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "roleProfilesSource": {"const": "src/color/dark-map.ts"},
+        "roleProfilesSourceSha256": {"$ref": "#/$defs/sha256"},
+        "roleProfilesCanonicalSha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "sources": {
+      "type": "array", "minItems": 5, "maxItems": 5,
+      "items": {"$ref": "#/$defs/source"}
+    },
+    "records": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sceneManifest", "sceneManifestSha256", "systems", "identity", "reviewed", "contrast", "rank", "aggregationCells", "totals", "missingPolicy", "extraPolicy", "duplicatePolicy", "abstentionPolicy"],
+      "properties": {
+        "sceneManifest": {"const": "fixtures/paired-theme/common-scenes.v1.json"},
+        "sceneManifestSha256": {"$ref": "#/$defs/sha256"},
+        "systems": {"type": "array", "prefixItems": [{"const": "material"}, {"const": "primer"}, {"const": "spectrum"}, {"const": "carbon"}, {"const": "fluent"}], "items": false},
+        "identity": {"const": "system/sceneId/paintId"},
+        "reviewed": {"type": "array", "minItems": 10, "maxItems": 10, "items": {"$ref": "#/$defs/reviewed"}},
+        "contrast": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "#/$defs/contrast"}},
+        "rank": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/rank"}},
+        "aggregationCells": {"$ref": "#/$defs/cells"},
+        "totals": {"$ref": "#/$defs/totals"},
+        "missingPolicy": {"const": "invalidate-run"},
+        "extraPolicy": {"const": "invalidate-run"},
+        "duplicatePolicy": {"const": "invalidate-run"},
+        "abstentionPolicy": {"const": "score-unchanged-light-paint; extraction-failure-is-not-abstention"}
+      }
+    },
+    "colorPipeline": {"$ref": "#/$defs/colorPipeline"},
+    "primary": {"$ref": "#/$defs/primary"},
+    "secondary": {"$ref": "#/$defs/secondary"},
+    "safety": {"$ref": "#/$defs/safety"},
+    "m2Gate": {"$ref": "#/$defs/m2Gate"},
+    "reportContract": {"$ref": "#/$defs/reportContract"},
+    "implementationPins": {
+      "type": "object", "additionalProperties": false,
+      "required": ["files"],
+      "properties": {"files": {"type": "array", "minItems": 33, "maxItems": 33, "items": {"$ref": "#/$defs/filePin"}}}
+    },
+    "heldOutAccessPolicy": {"$ref": "#/$defs/accessPolicy"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "package": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "version", "integrity", "license", "repository"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1}, "version": {"type": "string", "minLength": 1},
+        "integrity": {"type": "string", "pattern": "^sha512-"}, "license": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "format": "uri"}
+      }
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["system", "split", "protocol", "package", "mappingPolicy"],
+      "properties": {
+        "system": {"enum": ["material", "primer", "spectrum", "carbon", "fluent"]},
+        "split": {"enum": ["reference", "held-out"]},
+        "protocol": {"type": "string", "pattern": "^fixtures/paired-theme/.+\\.protocol\\.json$"},
+        "package": {"$ref": "#/$defs/package"},
+        "mappingPolicy": {"enum": ["generated-scheme", "precommitted-semantic-token-names", "precommitted-uuid-roots"]}
+      }
+    },
+    "reviewed": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sceneId", "paintId", "role", "token"],
+      "properties": {"sceneId": {"type": "string"}, "paintId": {"type": "string"}, "role": {"type": "string"}, "token": {"type": "string"}}
+    },
+    "contrast": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sceneId", "paintId", "role", "kind", "backdropPaintId"],
+      "properties": {"sceneId": {"type": "string"}, "paintId": {"type": "string"}, "role": {"type": "string"}, "kind": {"enum": ["text", "non-text"]}, "backdropPaintId": {"type": "string"}}
+    },
+    "rank": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sceneId", "pairId", "lowerPaintId", "upperPaintId"],
+      "properties": {"sceneId": {"type": "string"}, "pairId": {"type": "string"}, "lowerPaintId": {"type": "string"}, "upperPaintId": {"type": "string"}}
+    },
+    "cells": {
+      "type": "object", "additionalProperties": false,
+      "required": ["colorRoleScene", "contrastRoleScene", "rankScenes", "emptyCellPolicy"],
+      "properties": {
+        "colorRoleScene": {"type": "array", "items": {"type": "string"}},
+        "contrastRoleScene": {"type": "array", "items": {"type": "string"}},
+        "rankScenes": {"type": "array", "items": {"type": "string"}},
+        "emptyCellPolicy": {"const": "a-preregistered-empty-cell-invalidates-the-run"}
+      }
+    },
+    "totals": {
+      "type": "object", "additionalProperties": false,
+      "required": ["systems", "scenesPerSystem", "paintsPerVariant", "observationsPerSystem", "reviewedPerSystem", "totalReviewedRows", "colorRowsPerSystem", "totalColorRows", "contrastRowsPerSystem", "totalContrastRows", "rankRowsPerSystem", "totalRankRows"],
+      "properties": {
+        "systems": {"const": 5}, "scenesPerSystem": {"const": 4}, "paintsPerVariant": {"const": 15}, "observationsPerSystem": {"const": 45},
+        "reviewedPerSystem": {"const": 10}, "totalReviewedRows": {"const": 50}, "colorRowsPerSystem": {"const": 10}, "totalColorRows": {"const": 50},
+        "contrastRowsPerSystem": {"const": 6}, "totalContrastRows": {"const": 30}, "rankRowsPerSystem": {"const": 3}, "totalRankRows": {"const": 15}
+      }
+    },
+    "colorPipeline": {
+      "type": "object", "additionalProperties": false,
+      "required": ["space", "source", "alpha", "contrast"],
+      "properties": {
+        "space": {"const": "computed-srgb"}, "source": {"const": "fresh-headless-chrome-computed-style"},
+        "alpha": {"const": "gamma-encoded-srgb-source-over-recorded-backdrop-until-opaque"},
+        "contrast": {"const": "WCAG-relative-luminance-after-effective-paint-compositing"}
+      }
+    },
+    "primary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["color", "contrast", "rank", "aggregation", "composite"],
+      "properties": {
+        "color": {"type": "object", "additionalProperties": false, "required": ["formula", "cap"], "properties": {"formula": {"const": "d_i=min(Euclidean_OKLab(candidate_i,authored_dark_i)/0.10,1)"}, "cap": {"const": 0.1}}},
+        "contrast": {"type": "object", "additionalProperties": false, "required": ["formula", "cap"], "properties": {"formula": {"const": "c_i=min(abs(log2(candidate_contrast_i/authored_contrast_i)),1)"}, "cap": {"const": 1}}},
+        "rank": {"type": "object", "additionalProperties": false, "required": ["formula", "tieEpsilon"], "properties": {"formula": {"const": "r_i=abs(relation(candidate_deltaL)-relation(authored_deltaL))/2"}, "tieEpsilon": {"const": 0.01}}},
+        "aggregation": {"type": "object", "additionalProperties": false, "required": ["color", "contrast", "rank", "system"], "properties": {"color": {"const": "decision-median->scene-mean->role-mean"}, "contrast": {"const": "applicable-decision-median->scene-mean->role-mean"}, "rank": {"const": "pair-mean->scene-mean"}, "system": {"const": "independent-no-pooling"}}},
+        "composite": {"type": "object", "additionalProperties": false, "required": ["weights", "error", "score", "relativeImprovement"], "properties": {"weights": {"type": "object", "additionalProperties": false, "required": ["color", "contrast", "rank", "denominator"], "properties": {"color": {"const": 1}, "contrast": {"const": 1}, "rank": {"const": 1}, "denominator": {"const": 3}}}, "error": {"const": "E_s=(D_s+C_s+R_s)/3"}, "score": {"const": "PairScore_s=100*(1-E_s)"}, "relativeImprovement": {"const": "I_s=(E_baseline_s-E_candidate_s)/E_baseline_s"}}}
+      }
+    },
+    "secondary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["rawContrastError", "rankInversionRate", "tieMismatchRate", "accentHueError", "accentChromaThreshold", "lowChromaCandidatePenaltyDegrees"],
+      "properties": {"rawContrastError": {"const": "same-frozen-cells-uncapped-absolute-log2-error"}, "rankInversionRate": {"const": "fraction-of-frozen-pairs-with-loss-1"}, "tieMismatchRate": {"const": "fraction-of-frozen-pairs-with-loss-0.5"}, "accentHueError": {"const": "median-circular-degrees-over-eligible-authored-accent-rows"}, "accentChromaThreshold": {"const": 0.02}, "lowChromaCandidatePenaltyDegrees": {"const": 180}}
+    },
+    "safety": {
+      "type": "object", "additionalProperties": false,
+      "required": ["comparisonEpsilon", "textContrastFloor", "nonTextContrastFloor", "surfaceSeparationFloor", "hardFailureIds", "operationalDefinitions", "severityDefinitions", "reviewPolicy", "severityOrder", "candidateRegression"],
+      "properties": {"comparisonEpsilon": {"const": 1e-7}, "textContrastFloor": {"const": 4.5}, "nonTextContrastFloor": {"const": 3}, "surfaceSeparationFloor": {"const": 1.12}, "hardFailureIds": {"type": "array", "prefixItems": [{"const": "text-contrast"}, {"const": "non-text-contrast"}, {"const": "surface-separation"}, {"const": "surface-rank-reversal"}, {"const": "native-dark"}, {"const": "restore"}, {"const": "extraction"}], "items": false}, "operationalDefinitions": {"$ref": "#/$defs/operationalDefinitions"}, "severityDefinitions": {"$ref": "#/$defs/severityDefinitions"}, "reviewPolicy": {"const": "page-is-one-clustered-case-worst-state-wins-and-suspected-F/H2/H3-get-second-review"}, "severityOrder": {"const": "H0<H1<H2<H3; F-is-an-independent-invariant-failure"}, "candidateRegression": {"const": "new-failure-or-worse-margin-or-higher-page-severity-or-expanded-H2/H3-scope"}}
+    },
+    "operationalDefinitions": {
+      "type": "object", "additionalProperties": false,
+      "required": ["textContrast", "nonTextContrast", "surfaceSeparation", "surfaceRankReversal", "nativeDark", "restore", "extraction"],
+      "properties": {"textContrast": {"const": "candidate_ratio+1e-7<4.5"}, "nonTextContrast": {"const": "candidate_ratio+1e-7<3.0"}, "surfaceSeparation": {"const": "candidate_ratio+1e-7<1.12"}, "surfaceRankReversal": {"const": "authored_relation_is_non-tie-and-candidate_relation_is-opposite"}, "nativeDark": {"const": "automatic-mode-adds-any-extension-owned-root-or-paint-mutation"}, "restore": {"const": "any-owned-attribute-variable-svg-resource-url-or-computed-paint-diff-remains"}, "extraction": {"const": "missing-extra-duplicate-or-unresolved-record-invalidates-the-run"}}
+    },
+    "severityDefinitions": {
+      "type": "object", "additionalProperties": false,
+      "required": ["F", "H3", "H2", "H1", "H0"],
+      "properties": {"F": {"const": "independent-automatic-invariant-failure"}, "H3": {"const": "content-or-control-unusable-meaning-changed-or-protected-media-destructively-recolored"}, "H2": {"const": "main-task-possible-but-primary-hierarchy-state-diagram-or-large-region-requires-disable"}, "H1": {"const": "local-aesthetic-hue-or-chroma-regression-without-meaning-readability-or-interaction-loss"}, "H0": {"const": "equivalent-to-or-better-than-baseline"}}
+    },
+    "m2Gate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["minimumRelativeImprovementPerSystem", "componentNonRegressionTolerance", "requiredSystems", "baselineZeroPolicy", "requiredConditions", "macroEligible"],
+      "properties": {"minimumRelativeImprovementPerSystem": {"const": 0.1}, "componentNonRegressionTolerance": {"const": 1e-12}, "requiredSystems": {"type": "array", "prefixItems": [{"const": "carbon"}, {"const": "fluent"}], "items": false}, "baselineZeroPolicy": {"const": "relative-gate-not-evaluable-and-fails"}, "requiredConditions": {"const": "I>=0.10-and-no-D/C/R-regression-and-no-new-or-worsened-F/H2/H3-per-system"}, "macroEligible": {"const": false}}
+    },
+    "reportContract": {
+      "type": "object", "additionalProperties": false,
+      "required": ["perSystemRequired", "systemMacro", "rowMicroAverage", "manualSentinelLanguage"],
+      "properties": {"perSystemRequired": {"const": true}, "systemMacro": {"const": "descriptive-only"}, "rowMicroAverage": {"const": "forbidden-for-selection"}, "manualSentinelLanguage": {"const": "no-veto-observed-not-statistical-significance"}}
+    },
+    "filePin": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}}},
+    "accessPolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["systems", "logicalEvaluations", "replicatesPerLogicalEvaluation", "combinedOnly", "freezeCommitAtRuntime", "receipt", "failureConsumesExposure", "adapterLoadAfterReceipt", "sourceValueReadAfterReceipt", "packageMaterialization", "postM1Status"],
+      "properties": {"systems": {"type": "array", "prefixItems": [{"const": "carbon"}, {"const": "fluent"}], "items": false}, "logicalEvaluations": {"const": 1}, "replicatesPerLogicalEvaluation": {"const": 2}, "combinedOnly": {"const": true}, "freezeCommitAtRuntime": {"const": true}, "receipt": {"const": "~/scratch-data/semantic-dark-pairs/.exposure/{metricSpecSha256}.json"}, "failureConsumesExposure": {"const": true}, "adapterLoadAfterReceipt": {"const": true}, "sourceValueReadAfterReceipt": {"const": true}, "packageMaterialization": {"const": "pre-freeze-pnpm-policy-preflight-no-token-import-or-read"}, "postM1Status": {"const": "carbon-and-fluent-spent-not-valid-confirmatory-holdouts-for-M2"}}
+    }
+  }
+}

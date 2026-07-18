@@ -15,6 +15,7 @@
   "scripts": {
     "benchmark:feature-router": "tsx scripts/feature-router.ts",
     "benchmark:paired-theme": "tsx scripts/paired-theme.ts",
+    "benchmark:paired-theme-heldout": "tsx scripts/paired-theme-heldout.ts",
     "benchmark:vision": "tsx scripts/benchmark-vision.ts",
     "build": "node scripts/build.mjs",
     "e2e": "pnpm build && node scripts/e2e.mjs",

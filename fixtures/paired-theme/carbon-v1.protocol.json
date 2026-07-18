@@ -1,0 +1,37 @@
+{
+  "schema": "semantic-dark.paired-theme-protocol.v1",
+  "id": "carbon-themes-11.77.0-white-g100-v1",
+  "split": "held-out",
+  "source": {
+    "system": "carbon",
+    "kind": "exported-theme-object",
+    "package": {
+      "name": "@carbon/themes",
+      "version": "11.77.0",
+      "integrity": "sha512-5MGfcWiKwpIAmmtq4zlAeSkGkECaVXhr61Ol0EUFQskUlhAgeKhlIc5iWXFmwDb25oxzEFo0puH+GKsLL4GN/w==",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/carbon-design-system/carbon"
+    },
+    "lightExport": "white",
+    "darkExport": "g100",
+    "tokens": {
+      "canvas": "background",
+      "surface": "layer01",
+      "surfaceRaised": "layer02",
+      "textPrimary": "textPrimary",
+      "textSecondary": "textSecondary",
+      "tableHeader": "layerAccent01",
+      "selectedSurface": "layerSelected01",
+      "border": "borderSubtle01",
+      "focus": "focus",
+      "dangerSurface": "notificationBackgroundError",
+      "dangerText": "textPrimary"
+    }
+  },
+  "sceneManifest": "./common-scenes.v1.json",
+  "viewport": {"width": 1280, "height": 900, "deviceScaleFactor": 1},
+  "locale": "en-US",
+  "colorProfile": "srgb",
+  "limits": {"maxScenes": 24, "maxReviewedDecisions": 50},
+  "metricSpec": {"id": "semantic-dark.paired-theme-metric.v1", "path": "../evaluation/metric-spec.v1.json", "sha256": "3cdc696270917f080e1c8d7cbcd5954dc50b31b598205b0204fe2be48168089d"}
+}

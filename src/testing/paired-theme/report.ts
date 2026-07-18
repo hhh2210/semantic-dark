@@ -20,6 +20,9 @@ export interface PairedThemeReportProvenance {
   recordIdsSha256: string;
   metricPayloadSha256: string;
   baselineEngineCommit: string;
+  metricSpecId: string;
+  metricSpecSha256: string;
+  metricFreezeCommit: string;
   roleProfilesSourceSha256: string;
   roleProfilesCanonicalSha256: string;
   source: PackagePin;
@@ -199,6 +202,8 @@ function provenanceDetails(value: PairedThemeReportProvenance): string {
     ['Scene manifest SHA-256', value.sceneManifestSha256], ['Normalized tokens SHA-256', value.normalizedTokensSha256],
     ['Record IDs SHA-256', value.recordIdsSha256], ['Metric payload SHA-256', value.metricPayloadSha256],
     ['Baseline engine commit', value.baselineEngineCommit], ['ROLE_PROFILES source SHA-256', value.roleProfilesSourceSha256],
+    ['Metric spec', value.metricSpecId], ['Metric spec SHA-256', value.metricSpecSha256],
+    ['Metric freeze commit', value.metricFreezeCommit],
     ['ROLE_PROFILES canonical SHA-256', value.roleProfilesCanonicalSha256],
     ['Source package', `${value.source.name} ${value.source.version}`], ['Source integrity', value.source.integrity],
     ['Source license', value.source.license], ['Source repository', value.source.repository],

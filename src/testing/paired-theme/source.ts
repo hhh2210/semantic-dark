@@ -1,3 +1,4 @@
+import {loadHeldOutThemePair} from './heldout-source';
 import {materialThemePair, normalizedTokenHash} from './material';
 import {primerThemePair} from './primer';
 import {spectrumThemePair} from './spectrum';
@@ -23,6 +24,11 @@ export function resolvePairedThemeSource(
     }
     case 'spectrum': {
       const theme = spectrumThemePair(source);
+      return {theme, normalizedTokensSha256: normalizedTokenHash(theme)};
+    }
+    case 'carbon':
+    case 'fluent': {
+      const theme = loadHeldOutThemePair(source);
       return {theme, normalizedTokensSha256: normalizedTokenHash(theme)};
     }
   }

@@ -30,6 +30,8 @@ function provenance(system: 'material' | 'primer', worktreeClean = true) {
     sceneManifestSha256: 'c'.repeat(64), normalizedTokensSha256: 'd'.repeat(64),
     recordIdsSha256: 'e'.repeat(64), metricPayloadSha256: 'f'.repeat(64),
     baselineEngineCommit: '1'.repeat(40), roleProfilesSourceSha256: '2'.repeat(64),
+    metricSpecId: 'semantic-dark.paired-theme-metric.v1',
+    metricSpecSha256: '4'.repeat(64), metricFreezeCommit: '5'.repeat(40),
     roleProfilesCanonicalSha256: '3'.repeat(64),
     source: {name: `${system}-source`, version: '1', integrity: 'sha512-test', license: 'MIT', repository: 'repo'},
     browser: {name: 'Google Chrome' as const, version: '150'}, nodeVersion: 'v26',

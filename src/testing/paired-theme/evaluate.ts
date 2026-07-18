@@ -194,6 +194,9 @@ function assertMetricImplementation(metric: PairedThemeMetricConfig): void {
     [metric.textContrastFloor, 4.5, 'textContrastFloor'],
     [metric.nonTextContrastFloor, 3, 'nonTextContrastFloor'],
     [metric.surfaceSeparationFloor, MINIMUM_SURFACE_SEPARATION, 'surfaceSeparationFloor'],
+    [metric.rankTieEpsilon, 0.01, 'rankTieEpsilon'],
+    [metric.comparisonEpsilon, 1e-7, 'comparisonEpsilon'],
+    [metric.accentChromaThreshold, 0.02, 'accentChromaThreshold'],
   ] as const;
   for (const [actual, requiredValue, name] of expected) {
     if (actual !== requiredValue) throw new Error(`${name} differs from evaluator v1`);

@@ -2,7 +2,9 @@ import {runPairedTheme} from './runner';
 
 export async function main(values: readonly string[]): Promise<void> {
   const options: {protocolPath?: string; output?: string; chromePath?: string;
-    requireClean: boolean; headless: boolean} = {requireClean: true, headless: true};
+    metricFreezeCommit?: string; requireClean: boolean; headless: boolean} = {
+      requireClean: true, headless: true,
+    };
   for (let index = 0; index < values.length; index += 1) {
     const flag = values[index]!;
     if (flag === '--') continue;
@@ -14,6 +16,7 @@ export async function main(values: readonly string[]): Promise<void> {
       if (flag === '--protocol') options.protocolPath = value;
       else if (flag === '--output') options.output = value;
       else if (flag === '--chrome') options.chromePath = value;
+      else if (flag === '--metric-freeze-commit') options.metricFreezeCommit = value;
       else throw new Error(`Unknown argument: ${flag}`);
     }
   }
@@ -25,6 +28,7 @@ export async function main(values: readonly string[]): Promise<void> {
     output: options.output,
     requireClean: options.requireClean,
     headless: options.headless,
+    ...(options.metricFreezeCommit ? {metricFreezeCommit: options.metricFreezeCommit} : {}),
     ...(options.chromePath ? {chromePath: options.chromePath} : {}),
   });
   process.stdout.write(`${JSON.stringify({
