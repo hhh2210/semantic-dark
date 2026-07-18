@@ -46,6 +46,16 @@ export interface MaterialProtocolSource {
   generator: MaterialGeneratorConfig;
 }
 
+export interface PrimerProtocolSource {
+  system: 'primer';
+  kind: 'static-token-json';
+  package: PackagePin;
+  lightPath: 'dist/docs/functional/themes/light.json';
+  darkPath: 'dist/docs/functional/themes/dark.json';
+}
+
+export type DevelopmentProtocolSource = MaterialProtocolSource | PrimerProtocolSource;
+
 export interface PairedThemeMetricConfig {
   status: 'development-draft' | 'frozen-v1';
   deltaEOkCap: number;
@@ -67,7 +77,7 @@ export interface PairedThemeProtocol {
   schema: 'semantic-dark.paired-theme-protocol.v1';
   id: string;
   split: EvaluationSplit;
-  source: MaterialProtocolSource;
+  source: DevelopmentProtocolSource;
   sceneManifest: string;
   viewport: {width: number; height: number; deviceScaleFactor: number};
   locale: string;

@@ -1,8 +1,33 @@
+import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {validateProtocol, validateSceneManifest} from '../../src/testing/paired-theme/protocol';
+import {
+  loadPairedThemeProtocol,
+  validateProtocol,
+  validateSceneManifest,
+} from '../../src/testing/paired-theme/protocol';
 import type {SceneDefinition} from '../../src/testing/paired-theme/types';
 
 const limits = {maxScenes: 24, maxReviewedDecisions: 50};
+const materialSource = {
+  system: 'material', kind: 'generated-scheme',
+  package: {
+    name: '@material/material-color-utilities', version: '0.4.0',
+    integrity: 'sha512-test', license: 'Apache-2.0', repository: 'material-repo',
+  },
+  generator: {seed: '#6750A4', variant: 'tonal-spot', specVersion: '2021',
+    platform: 'phone', contrastLevel: 0},
+};
+const primerSource = {
+  system: 'primer', kind: 'static-token-json',
+  package: {
+    name: '@primer/primitives', version: '11.9.0', integrity: 'sha512-test',
+    license: 'MIT', repository: 'primer-repo',
+  },
+  lightPath: 'dist/docs/functional/themes/light.json',
+  darkPath: 'dist/docs/functional/themes/dark.json',
+};
 
 function scene(overrides: Partial<SceneDefinition> = {}): SceneDefinition {
   return {
@@ -24,7 +49,7 @@ describe('paired-theme protocol validation', () => {
       schema: 'semantic-dark.paired-theme-protocol.v1',
       id: 'material-test',
       split: 'development',
-      source: {system: 'material', kind: 'generated-scheme'},
+      source: materialSource,
       sceneManifest: 'fixtures/paired-theme/common-scenes.v1.json',
       viewport: {width: 1280, height: 900, deviceScaleFactor: 1},
       locale: 'en-US',
@@ -50,7 +75,7 @@ describe('paired-theme protocol validation', () => {
     const base = {
       schema: 'semantic-dark.paired-theme-protocol.v1',
       id: 'bad',
-      source: {system: 'material', kind: 'generated-scheme'},
+      source: materialSource,
       sceneManifest: 'scenes.json',
       viewport: {width: 1280, height: 900, deviceScaleFactor: 1},
       locale: 'en-US',
@@ -76,6 +101,53 @@ describe('paired-theme protocol validation', () => {
       split: 'development',
       limits: {maxScenes: 25, maxReviewedDecisions: 50},
     })).toThrow('exceeds the M1');
+  });
+
+  it('accepts the bounded Primer static-token contract and rejects source drift', () => {
+    const protocol = validateProtocol({
+      schema: 'semantic-dark.paired-theme-protocol.v1', id: 'primer-test',
+      split: 'development', source: primerSource, sceneManifest: './scenes.json',
+      viewport: {width: 1280, height: 900, deviceScaleFactor: 1}, locale: 'en-US',
+      colorProfile: 'srgb', limits,
+      metric: {
+        status: 'development-draft', deltaEOkCap: 0.1, contrastLog2Cap: 1,
+        rankTieEpsilon: 0.01, comparisonEpsilon: 1e-7, accentChromaThreshold: 0.02,
+        textContrastFloor: 4.5, nonTextContrastFloor: 3, surfaceSeparationFloor: 1.12,
+        componentWeights: {color: 1 / 3, contrast: 1 / 3, rank: 1 / 3},
+      },
+    });
+    expect(protocol.source.system).toBe('primer');
+    expect(() => validateProtocol({...protocol, source: {...primerSource,
+      lightPath: 'dist/docs/functional/themes/dark.json'}})).toThrow(/source paths/);
+    expect(() => validateProtocol({...protocol, source: {...primerSource,
+      package: {...primerSource.package, extra: 'drift'}}})).toThrow(/unexpected shape/);
+  });
+
+  it('resolves the scene manifest relative to the protocol and blocks path escape', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'paired-theme-protocol-'));
+    try {
+      const scenePath = path.join(directory, 'scenes.json');
+      const protocolPath = path.join(directory, 'protocol.json');
+      await writeFile(scenePath, JSON.stringify({
+        schema: 'semantic-dark.paired-theme-scenes.v1', scenes: [scene()],
+      }));
+      const protocol = {
+        schema: 'semantic-dark.paired-theme-protocol.v1', id: 'relative',
+        split: 'development', source: materialSource, sceneManifest: './scenes.json',
+        viewport: {width: 100, height: 100, deviceScaleFactor: 1}, locale: 'en-US',
+        colorProfile: 'srgb', limits,
+        metric: {status: 'development-draft', deltaEOkCap: 0.1, contrastLog2Cap: 1,
+          rankTieEpsilon: 0.01, comparisonEpsilon: 1e-7, accentChromaThreshold: 0.02,
+          textContrastFloor: 4.5, nonTextContrastFloor: 3, surfaceSeparationFloor: 1.12,
+          componentWeights: {color: 1 / 3, contrast: 1 / 3, rank: 1 / 3}},
+      };
+      await writeFile(protocolPath, JSON.stringify(protocol));
+      expect((await loadPairedThemeProtocol(protocolPath)).sceneManifestPath).toBe(scenePath);
+      await writeFile(protocolPath, JSON.stringify({...protocol, sceneManifest: '../escape.json'}));
+      await expect(loadPairedThemeProtocol(protocolPath)).rejects.toThrow(/stay inside/);
+    } finally {
+      await rm(directory, {recursive: true, force: true});
+    }
   });
 
   it('rejects backdrop cycles, duplicates, and reviewed-row overflow', () => {

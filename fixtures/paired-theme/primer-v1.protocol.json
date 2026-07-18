@@ -1,24 +1,19 @@
 {
   "schema": "semantic-dark.paired-theme-protocol.v1",
-  "id": "material-tonal-spot-2021-v1",
+  "id": "primer-primitives-11.9.0-v1",
   "split": "development",
   "source": {
-    "system": "material",
-    "kind": "generated-scheme",
+    "system": "primer",
+    "kind": "static-token-json",
     "package": {
-      "name": "@material/material-color-utilities",
-      "version": "0.4.0",
-      "integrity": "sha512-dlq6VExJReb8dhjj3a/yTigr3ncNwoFmL5Iy2ENtbDX03EmNeOEdZ+vsaGrj7RTuO+mB7L58II4LCsl4NpM8uw==",
-      "license": "Apache-2.0",
-      "repository": "https://github.com/material-foundation/material-color-utilities"
+      "name": "@primer/primitives",
+      "version": "11.9.0",
+      "integrity": "sha512-yESOalhd7s7S3unV1V32v3Z0RszXiiz6pzy6hVI9xpdTh1q1Gt8vyDFxRlqIvuwc5ZaO1+gYQTDbjxb4nWBzMw==",
+      "license": "MIT",
+      "repository": "https://github.com/primer/primitives"
     },
-    "generator": {
-      "seed": "#6750A4",
-      "variant": "tonal-spot",
-      "specVersion": "2021",
-      "platform": "phone",
-      "contrastLevel": 0
-    }
+    "lightPath": "dist/docs/functional/themes/light.json",
+    "darkPath": "dist/docs/functional/themes/dark.json"
   },
   "sceneManifest": "./common-scenes.v1.json",
   "viewport": {"width": 1280, "height": 900, "deviceScaleFactor": 1},

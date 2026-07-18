@@ -1,4 +1,4 @@
-import {runMaterialPairedTheme} from './runner';
+import {runPairedTheme} from './runner';
 
 export async function main(values: readonly string[]): Promise<void> {
   const options: {protocolPath?: string; output?: string; chromePath?: string;
@@ -20,7 +20,7 @@ export async function main(values: readonly string[]): Promise<void> {
   if (!options.protocolPath || !options.output) {
     throw new Error('--protocol and --output are required');
   }
-  const result = await runMaterialPairedTheme({
+  const result = await runPairedTheme({
     protocolPath: options.protocolPath,
     output: options.output,
     requireClean: options.requireClean,

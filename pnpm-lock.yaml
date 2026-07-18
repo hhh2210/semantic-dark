@@ -11,6 +11,9 @@ importers:
       '@material/material-color-utilities':
         specifier: 0.4.0
         version: 0.4.0
+      '@primer/primitives':
+        specifier: 11.9.0
+        version: 11.9.0
       '@types/chrome':
         specifier: 0.2.2
         version: 0.2.2
@@ -287,6 +290,9 @@ packages:
 
   '@oxc-project/types@0.139.0':
     resolution: {integrity: sha512-r9gHphtCs+1M7J0pw6Sn/hh/Wpa/iQrOOkrNAlVLF/gHq+/CJmHIWKKUUhdWjcD6CIa8idarspCsASiXCXvFUw==}
+
+  '@primer/primitives@11.9.0':
+    resolution: {integrity: sha512-yESOalhd7s7S3unV1V32v3Z0RszXiiz6pzy6hVI9xpdTh1q1Gt8vyDFxRlqIvuwc5ZaO1+gYQTDbjxb4nWBzMw==}
 
   '@rolldown/binding-android-arm64@1.1.5':
     resolution: {integrity: sha512-lZg8fqIv2v7FF237bwMgzGZEJvGL79/s5knJ/i6FmsGF4XXlzccZ4jb+TrFIxtSSxFtIpdsgrPZeMk1I9AFcyQ==}
@@ -1128,6 +1134,8 @@ snapshots:
     optional: true
 
   '@oxc-project/types@0.139.0': {}
+
+  '@primer/primitives@11.9.0': {}
 
   '@rolldown/binding-android-arm64@1.1.5':
     optional: true

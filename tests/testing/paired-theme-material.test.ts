@@ -6,6 +6,7 @@ import {validateProtocol} from '../../src/testing/paired-theme/protocol';
 describe('Material paired-theme adapter', () => {
   it('generates the frozen Tonal Spot light/dark semantic pairs', () => {
     const protocol = validateProtocol(materialProtocol);
+    if (protocol.source.system !== 'material') throw new Error('Expected Material protocol');
     const theme = materialThemePair(protocol.source);
     expect(theme.tokens.canvas).toMatchObject({
       light: '#fdf7ff', dark: '#141218', sourceToken: 'background',

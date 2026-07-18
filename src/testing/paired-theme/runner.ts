@@ -13,7 +13,6 @@ import {
 } from '../artifacts';
 import {collectPaintObservations} from './collector';
 import {evaluatePairedThemeSystem} from './evaluate';
-import {materialThemePair, normalizedTokenHash} from './material';
 import {buildObservationMatrix, REQUIRED_OBSERVATION_VARIANTS} from './observations';
 import {loadPairedThemeProtocol} from './protocol';
 import {
@@ -23,14 +22,15 @@ import {
   type PairedThemeReportProvenance,
 } from './report';
 import {renderPairedThemeDocument} from './render';
+import {resolvePairedThemeSource} from './source';
 import {buildThemeVariantValues} from './variants';
-import type {PaintObservation} from './types';
+import type {NormalizedThemePair, PaintObservation} from './types';
 
 const execFile = promisify(execFileCallback);
 const DEFAULT_CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const M0_MANIFEST = 'fixtures/evaluation/m0-manifest.v1.json';
 
-export interface MaterialPairedThemeRunOptions {
+export interface PairedThemeRunOptions {
   repoRoot?: string;
   protocolPath: string;
   output: string;
@@ -39,7 +39,7 @@ export interface MaterialPairedThemeRunOptions {
   requireClean?: boolean;
 }
 
-export interface MaterialPairedThemeRunResult {
+export interface PairedThemeRunResult {
   report: PairedThemeReport;
   reproducibility: {
     status: 'exact';
@@ -47,6 +47,9 @@ export interface MaterialPairedThemeRunResult {
     runB: RunIdentity;
   };
 }
+
+export type MaterialPairedThemeRunOptions = PairedThemeRunOptions;
+export type MaterialPairedThemeRunResult = PairedThemeRunResult;
 
 interface RunIdentity {
   resultSha256: string;
@@ -63,15 +66,17 @@ interface M0Identity {
   roleProfilesCanonicalSha256: string;
 }
 
-/** Execute two independent Chrome launches and require byte-stable Material evidence. */
-export async function runMaterialPairedTheme(
-  options: MaterialPairedThemeRunOptions,
-): Promise<MaterialPairedThemeRunResult> {
+/** Execute two independent Chrome launches and require byte-stable paired-theme evidence. */
+export async function runPairedTheme(
+  options: PairedThemeRunOptions,
+): Promise<PairedThemeRunResult> {
   const repoRoot = path.resolve(options.repoRoot ?? process.cwd());
   const output = await prepareScratchOutput(options.output, 'Paired-theme');
   const loaded = await loadPairedThemeProtocol(path.resolve(repoRoot, options.protocolPath));
-  if (loaded.protocol.source.system !== 'material') throw new Error('Material runner requires Material');
-  const theme = materialThemePair(loaded.protocol.source);
+  const {theme, normalizedTokensSha256} = resolvePairedThemeSource(loaded.protocol.source);
+  if (theme.split !== loaded.protocol.split) {
+    throw new Error(`Theme split ${theme.split} does not match protocol split ${loaded.protocol.split}`);
+  }
   const variants = buildThemeVariantValues(theme, loaded.scenes.scenes);
   const git = await gitIdentity(repoRoot);
   const requireClean = options.requireClean !== false;
@@ -85,13 +90,13 @@ export async function runMaterialPairedTheme(
     headless: options.headless !== false,
     protocolSha256,
     sceneManifestSha256,
-    normalizedTokensSha256: normalizedTokenHash(theme),
+    normalizedTokensSha256,
     evaluatorCommit: git.commit,
     worktreeClean: git.clean,
     m0,
   };
-  const runA = await runOnce('run-a', output, loaded, theme.source, variants.values, common);
-  const runB = await runOnce('run-b', output, loaded, theme.source, variants.values, common);
+  const runA = await runOnce('run-a', output, loaded, theme, variants.values, common);
+  const runB = await runOnce('run-b', output, loaded, theme, variants.values, common);
   assertExact(runA.identity, runB.identity);
   const finalReport = createPairedThemeReport([runA.evaluation], runA.provenance, {
     status: 'exact',
@@ -104,11 +109,14 @@ export async function runMaterialPairedTheme(
   return {report: finalReport, reproducibility};
 }
 
+/** Backward-compatible Material entry point. */
+export const runMaterialPairedTheme = runPairedTheme;
+
 async function runOnce(
   runName: string,
   output: string,
   loaded: Awaited<ReturnType<typeof loadPairedThemeProtocol>>,
-  source: PairedThemeReportProvenance['source'],
+  theme: Pick<NormalizedThemePair, 'system' | 'split' | 'source'>,
   values: ReturnType<typeof buildThemeVariantValues>['values'],
   common: {
     repoRoot: string; chromePath: string; headless: boolean; protocolSha256: string;
@@ -138,8 +146,8 @@ async function runOnce(
       await writeFile(path.join(runOutput, `render-${variant}.html`), html, 'utf8');
       observations.push(...await collectPaintObservations(browser, {
         html,
-        system: 'material',
-        split: loaded.protocol.split,
+        system: theme.system,
+        split: theme.split,
         variant,
         scenes: loaded.scenes.scenes,
         viewport: loaded.protocol.viewport,
@@ -150,11 +158,11 @@ async function runOnce(
     await browser.close();
   }
   const matrix = buildObservationMatrix({
-    system: 'material', split: loaded.protocol.split,
+    system: theme.system, split: theme.split,
     scenes: loaded.scenes.scenes, observations,
   });
   const evaluation = evaluatePairedThemeSystem(matrix, loaded.scenes.scenes, loaded.protocol.metric);
-  assertMaterialDenominators(evaluation.counts);
+  assertCommonDenominators(evaluation.counts);
   const recordIds = [...evaluation.rows.color, ...evaluation.rows.contrast, ...evaluation.rows.rank]
     .map((row) => row.id).sort();
   const recordIdsSha256 = sha256Text(serializeCanonicalJson(recordIds));
@@ -173,7 +181,7 @@ async function runOnce(
     baselineEngineCommit: common.m0.baselineEngineCommit,
     roleProfilesSourceSha256: common.m0.roleProfilesSourceSha256,
     roleProfilesCanonicalSha256: common.m0.roleProfilesCanonicalSha256,
-    source,
+    source: theme.source,
     browser: {name: 'Google Chrome', version: browserVersion},
     nodeVersion: process.version,
     viewport: loaded.protocol.viewport,
@@ -222,14 +230,14 @@ async function gitIdentity(repoRoot: string): Promise<{commit: string; clean: bo
   return {commit: commit.trim(), clean: status.trim().length === 0};
 }
 
-function assertMaterialDenominators(counts: {scenes: number; paintsPerVariant: number;
+function assertCommonDenominators(counts: {scenes: number; paintsPerVariant: number;
   observations: number; reviewedDecisions: number; colorRows: number;
   contrastRows: number; rankPairs: number}): void {
   const actual = [counts.scenes, counts.paintsPerVariant, counts.observations,
     counts.reviewedDecisions, counts.colorRows, counts.contrastRows, counts.rankPairs];
   const expected = [4, 15, 45, 10, 10, 6, 3];
   if (actual.some((value, index) => value !== expected[index])) {
-    throw new Error(`Material denominator mismatch: ${actual.join('/')}`);
+    throw new Error(`Paired-theme denominator mismatch: ${actual.join('/')}`);
   }
 }
 
