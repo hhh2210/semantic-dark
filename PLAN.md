@@ -34,6 +34,11 @@ small fixtures, source pins, schemas, and aggregate results.
 We first tune the existing deterministic role profiles. A learned model is an
 optional later experiment, not the starting point.
 
+Source intake is staged rather than parallel. M1a completes one end-to-end
+vertical slice using Primer Primitives only. Material and Spectrum are admitted
+only after that slice reproduces from a clean run. Carbon and Fluent remain
+sealed until the evaluation protocol and one candidate are committed.
+
 ## How we arrived here
 
 ### 1. Simple inversion solves the wrong problem
@@ -204,40 +209,149 @@ The paired unit is a semantic token or paint role whenever possible.
 
 ### Split rule
 
-Tuning and evaluation are separated by organization/design system and component
-family. Nodes from the same component, stylesheet, or page template never land
-on both sides of an evaluation. Random screenshot or DOM-node splits are
-forbidden because they overstate generalization.
+The split unit is the complete design-system family. Equivalent component
+families appear across systems so transfer can be measured, but scenes, states,
+stylesheets, aliases, and tokens from one system never cross splits. Primer,
+Material, and Spectrum are tuning references; Carbon and Fluent are sealed
+evaluation systems. Split membership, exclusions, source revisions, and record
+identities are frozen before profile tuning. Random screenshot or DOM-node
+splits are forbidden because they overstate generalization.
 
 ## Milestones and stop conditions
 
-### M0 — Freeze the current baseline
+### M0 — Freeze runtime safety and the unchanged color baseline
 
 Deliverables:
 
 - record `pnpm verify` and `pnpm e2e` results from one pinned commit;
 - reduce the reported table/white-band failures into self-authored fixtures;
-- record current pair-agreement, contrast, restore, and native-dark outcomes;
-- define one manifest for mechanism fixtures and real-page pilot cases.
+- freeze the baseline commit and the exact `ROLE_PROFILES` values and hash;
+- freeze mechanism-fixture and real-page pilot IDs, viewport, states, expected
+  native-dark decision, and primary task before inspecting a candidate;
+- record contrast, restore, native-dark, and performance outcomes that the
+  current runtime can already measure.
 
-Gate: every later experiment must run against the same cases and report both
-improvements and regressions. A prettier screenshot without a baseline is not
-evidence.
+Pair agreement is deliberately not recorded in M0 because the evaluator does
+not exist yet. The frozen objects are the commit, parameters, cases, and runtime
+safety results. Every later experiment must run against those same objects and
+report both improvements and regressions.
 
-### M1 — Build the small authored-pair evaluator
+### M1a — Complete one-source vertical slice
 
-Deliverables:
+Using only a pinned Primer Primitives revision:
 
-- parse pinned token pairs from the three reference systems;
-- render no more than 24 local component/state scenes;
+- render four to six representative component/state scenes;
+- extract and review no more than 12 paint decisions;
 - collect computed style for target nodes and `::before`/`::after` where used;
-- calculate role-conditioned color difference, contrast, surface ordering, and
-  hue/chroma retention;
-- produce an HTML/JSON report, with raw artifacts under `~/scratch-data`.
+- run the unchanged baseline profiles and produce a JSON/HTML report;
+- prove that a clean rerun reproduces record IDs and metrics exactly.
 
-Gate: stop collection once every initial role/state is represented and the
-50-row reviewed set is full. Do not add more sites merely to increase a sample
-count.
+This slice is allowed to refine the normalized pair schema and metric
+implementation. It is not allowed to tune `ROLE_PROFILES` or inspect Carbon or
+Fluent target results.
+
+Gate: do not add another token schema until the Primer slice has no unresolved
+pairing, reproduction, or license ambiguity.
+
+### M1b — Normalize the remaining tuning sources
+
+Add Material and Spectrum through source-specific adapters rather than assuming
+their token schemas or pairing semantics are interchangeable with Primer. Expand
+only to the existing ceilings of 24 scenes and 50 reviewed decisions. At least
+20 decisions are assigned to the sealed Carbon/Fluent evaluation before their
+candidate outcomes are viewed; the remainder may be used for tuning diagnostics.
+
+No parameter search occurs in M1b. The purpose is to demonstrate that all
+sources normalize into the same semantic record contract without changing the
+meaning of a role, state, exclusion, or missing value.
+
+### M1c — Preregister the metric contract and seal evaluation
+
+Before the first parameter search or held-out scoring run, commit a versioned
+protocol block in the paired-theme manifest. It contains:
+
+- baseline commit and exact `ROLE_PROFILES` values/hash;
+- source revisions, split membership, record IDs, exclusions, and role/state
+  coverage;
+- the primary formula, aggregation units and reducers defined below;
+- handling for abstention, missing records, ties, alpha compositing, and empty
+  cells;
+- every secondary metric, non-inferiority margin, harm label, and M2 decision
+  threshold;
+- the real-page cases, states, tasks, and blind-review procedure.
+
+The protocol commit hash becomes part of every result. After held-out scoring,
+its formulas, reducers, thresholds, exclusions, and labels cannot change. A
+necessary change creates a new protocol version, invalidates the old comparison,
+and requires a genuinely untouched held-out family; it cannot be used to rescue
+the current candidate.
+
+### Preregistered authored-pair metric
+
+There is deliberately no weighted composite across color, contrast, hierarchy,
+and hue. Those quantities have different meanings, and weights chosen after
+seeing a design system would make the 10% gate negotiable.
+
+The single primary endpoint is `role_macro_delta_e_loss`, computed separately
+for each design system `s`. All colors below mean the effective rendered paint
+after alpha compositing against the recorded backdrop:
+
+```text
+d_i       = Euclidean distance in OKLab(candidate_i, authored_dark_i)
+cell_loss = median(d_i) within a preregistered (role, component, state) cell
+role_loss = unweighted mean(cell_loss) over preregistered cells for that role
+L_s       = unweighted mean(role_loss) over preregistered roles in system s
+I_s       = (L_s_baseline - L_s_candidate) / L_s_baseline
+```
+
+Baseline and candidate use identical record IDs. An abstention is scored as the
+actual unchanged source paint. An extraction failure or missing candidate record
+is a hard failure and may not be silently dropped. Empty cells and the role list
+are resolved and committed before scoring. If `L_s_baseline` is zero, the
+candidate must also be zero and `I_s` is reported as not applicable.
+
+The following are separate secondary metrics and are never reweighted into
+`L_s`:
+
+- `contrast_error`: median `abs(log2(candidate contrast / authored contrast))`,
+  macro-aggregated with the same frozen cells;
+- `surface_rank_inversion_rate`: the fraction of preregistered comparable
+  surface pairs whose candidate lightness order disagrees with the authored dark
+  order, using the frozen tie epsilon;
+- `accent_hue_error`: median circular hue error for records above the frozen
+  chroma eligibility threshold;
+- hard contrast, native-dark, restore, and surface-separation failure counts.
+
+Every report shows `L_s`, `I_s`, and all secondary metrics for each design
+system separately. An equal-weight system macro may be shown as a summary, but
+it is descriptive only. Paint-row micro averages never select a candidate, and
+an improvement on one system cannot cancel a regression on another.
+
+### Harm taxonomy and small-sample interpretation
+
+The 50 reviewed decisions and 12 pages are a frozen engineering sentinel, not
+an estimate of the web-wide failure rate. A page is one clustered case no
+matter how many nodes or screenshots it contains; its outcome is its worst
+observed severity.
+
+| Level | Operational definition | Gate |
+|---|---|---|
+| `F` invariant failure | Automatic mode changes native-dark/forced-colors content; supported text falls below 4.5:1; required non-text or focus paint falls below 3:1; surface separation falls below 1.12:1; exact restore, layout, interaction, or mutation handling breaks | Any candidate-caused case vetoes the candidate |
+| `H3` destructive | Primary content/control disappears or becomes unusable; status/chart meaning changes; protected media, logo, QR, or CAPTCHA is destructively recolored | Any new or worsened case vetoes the candidate |
+| `H2` major | The main task remains possible, but primary table hierarchy, focus/selected/disabled state, diagram tracking, or a large bright region is bad enough that a user must disable the extension | Any new or worsened case in the sentinel vetoes the candidate |
+| `H1` minor | Local aesthetic or hue/chroma regression without loss of meaning, readability, or interaction | Report separately; does not alone prove a safety failure |
+| `H0` none | Equivalent to or better than the baseline | Pass |
+
+A candidate-caused regression means its severity exceeds the pinned baseline,
+or the affected scope materially expands at the same `H2`/`H3` level. A baseline
+problem that does not worsen is recorded as `open-existing`, not hidden as a
+candidate regression. Each reviewed decision is labeled before tuning with its
+expected role/action; A/B order is blinded, and every suspected `F`, `H2`, or
+`H3` receives a second review.
+
+Zero severe failures in this panel means only "no veto was observed in the
+frozen sentinel." It is not statistical evidence of a low population harm rate
+and must not be described as significant or as generalizing across the web.
 
 ### M2 — Tune the deterministic role profiles
 
@@ -246,16 +360,23 @@ First compare the current hand-set values in
 regression. The search may adjust role lightness bands and chroma retention, but
 the contrast and hierarchy solver remains fixed.
 
-A candidate is kept only if it:
+Candidates are selected using only Primer, Material, Spectrum, and mechanism
+fixtures. After the candidate parameters and decision rule are committed, the
+baseline and candidate are evaluated together once on Carbon, Fluent, the
+sealed reviewed decisions, and the real-page pilot.
 
-- has zero new hard-constraint, native-dark, or restore failures;
-- improves the held-out design-system pair metric by at least 10% relative to
-  the frozen baseline;
-- creates no severe regression in the 50 reviewed decisions or 12-page pilot;
+A candidate advances only if it:
+
+- has zero new `F`, `H2`, or `H3` regression;
+- reaches `I_s >= 10%` separately on Carbon and on Fluent;
+- passes every preregistered secondary non-inferiority margin separately on both
+  held-out systems;
 - improves at least one original failure fixture without a site-specific rule.
 
-If those gates are not met, keep the existing profiles and classify the
-residual errors. A negative result is useful and ends this branch of work.
+If systems disagree or a gate is missed, the result is inconclusive or negative:
+keep the existing profiles and classify the residual errors. A held-out failure
+must not trigger same-protocol retuning against that system. It is evidence that
+the candidate did not generalize.
 
 ### M3 — Decide whether a tiny semantic router is justified
 
@@ -301,10 +422,10 @@ the same as safely darkening an arbitrary light-only site.
 
 ### Authored-pair agreement
 
-- role-conditioned OKLab/OKLCH color difference;
-- text and non-text contrast agreement;
-- surface-rank and state-separation agreement;
-- brand/accent hue preservation;
+- per-system `role_macro_delta_e_loss` and relative improvement;
+- per-system contrast error;
+- per-system surface-rank inversion and state-separation results;
+- per-system brand/accent hue error;
 - correct recognition of `keep` or asset-swap cases.
 
 This score diagnoses palette quality. It does not gate deployment by itself.
@@ -320,6 +441,21 @@ This score diagnoses palette quality. It does not gate deployment by itself.
 - blind preference on the small reviewed failure set.
 
 This score gates runtime changes.
+
+## Reporting contract
+
+Every result includes one row per design system before any equal-weight macro
+summary:
+
+| System | Split | Records/cells | Baseline `L_s` | Candidate `L_s` | `I_s` | Secondary metrics | `F/H3/H2/H1` |
+|---|---|---:|---:|---:|---:|---|---|
+
+The report also lists component/state denominators, abstentions, missing records,
+exclusions, and raw sentinel counts (`better`, `equivalent`, `H1 worse`, `H2+`
+`worse`). Confidence intervals may be descriptive where meaningful, but this
+small clustered panel is not used to claim statistical significance. Material,
+Primer, Spectrum, Carbon, and Fluent are never represented only by a pooled
+score.
 
 ## Explicitly deferred
 
@@ -338,8 +474,9 @@ class that the proposed work can actually address.
 
 ## Immediate next step
 
-M0 and M1 form one bounded experiment, not a data-collection program. Build the
-small evaluator, tune the existing profiles once, run the held-out and real-page
-scorecards, and make a go/no-go decision. Until that evidence exists, the
-current deterministic engine remains the product and the device model remains
-offline research.
+Complete M0, then the Primer-only M1a vertical slice. Admit Material and Spectrum
+only after it reproduces cleanly. Finish the normalized tuning set, commit the
+M1c metric contract, and select one candidate without inspecting held-out
+scores. Only that frozen candidate is evaluated once on Carbon, Fluent, sealed
+decisions, and real pages. Until those gates clear, the current deterministic
+engine remains the product and the device model remains offline research.
