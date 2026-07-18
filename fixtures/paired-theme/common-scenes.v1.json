@@ -47,10 +47,12 @@
       "title": "Danger alert surface and text",
       "paints": [
         {"id": "status.canvas", "component": "alert-region", "state": "default", "property": "background-color", "pseudo": null, "role": "background", "token": "canvas", "backdropPaintId": null, "contrastKind": "none", "reviewed": false},
-        {"id": "status.surface", "component": "alert", "state": "danger", "property": "background-color", "pseudo": null, "role": "accent", "token": "dangerSurface", "backdropPaintId": "status.canvas", "contrastKind": "non-text", "reviewed": true},
+        {"id": "status.surface", "component": "alert", "state": "danger", "property": "background-color", "pseudo": null, "role": "surface", "token": "dangerSurface", "backdropPaintId": "status.canvas", "contrastKind": "none", "reviewed": true},
         {"id": "status.text", "component": "alert-text", "state": "danger", "property": "color", "pseudo": null, "role": "text", "token": "dangerText", "backdropPaintId": "status.surface", "contrastKind": "text", "reviewed": true}
       ],
-      "surfacePairs": []
+      "surfacePairs": [
+        {"id": "status.canvas-to-surface", "lowerPaintId": "status.canvas", "upperPaintId": "status.surface"}
+      ]
     }
   ]
 }
