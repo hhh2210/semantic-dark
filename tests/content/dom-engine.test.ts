@@ -22,6 +22,12 @@ describe('DomThemeEngine', () => {
     expect(css).toContain(`:root[data-semantic-dark-active][${DOM_ATTRIBUTE.background}]`);
     expect(css).toContain(`:root[data-semantic-dark-active] [${DOM_ATTRIBUTE.background}]`);
     expect(css).toContain(`:root[data-semantic-dark-active][${DOM_ATTRIBUTE.updating}]`);
+    expect(css).toContain(
+      `:root[data-semantic-dark-active] [${DOM_ATTRIBUTE.beforeBackground}]::before`,
+    );
+    expect(css).toContain(
+      `:root[data-semantic-dark-active] [${DOM_ATTRIBUTE.afterBackground}]::after`,
+    );
   });
   it('maps authored backgrounds, text, and borders through role variables', async () => {
     document.body.innerHTML = `

@@ -16,6 +16,7 @@ import {
   waitForRestoredState,
 } from '../src/testing/e2e/assertions.mjs';
 import {contrastRatio, parseRgb} from '../src/testing/e2e/colors.mjs';
+import {exerciseInteractiveDomEffects} from '../src/testing/e2e/dom-effects.mjs';
 import {
   captureBaseline,
   inspectCurrentPopup,
@@ -83,6 +84,7 @@ async function main() {
     await session.page.screenshot({path: afterPath, fullPage: true});
     const transformed = await readPageState(session.page);
     const initialMetrics = verifyTransformedState(transformed);
+    const interactionMetrics = await exerciseInteractiveDomEffects(session.page, CONFIG.timeout);
 
     const expectedHost = new URL(fixture.url).host;
     const popupLight = await inspectCurrentPopup({
@@ -226,6 +228,7 @@ async function main() {
       },
       popup: {light: popupLight, dark: popupDark},
       metrics: {initial: initialMetrics, reprocessed: reprocessedMetrics},
+      interactionMetrics,
       rasterTimingsMs: {
         initial: {
           wall: initialMetrics.rasterMs,

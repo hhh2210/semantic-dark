@@ -86,20 +86,26 @@
       <section class="card benchmark-card" aria-labelledby="benchmark-title">
         <p class="eyebrow">Inkling regression fixture</p>
         <h2 id="benchmark-title">Gradient-backed table category</h2>
-        <table class="benchmark-table">
-          <tbody>
-            <tr class="benchmark-category-row">
-              <th id="benchmark-category" class="benchmark-category-label" scope="row">Audio</th>
-              <td class="benchmark-category-cell"></td>
-              <td class="benchmark-category-cell"></td>
-            </tr>
-            <tr>
-              <th scope="row">Audio MC</th>
-              <td>56.6%</td>
-              <td>66.8%</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="pseudo-text-fixture">
+          <p id="pseudo-explicit-host">Explicit pseudo color</p>
+          <p id="pseudo-inherited-host">Inherited pseudo color</p>
+        </div>
+        <div id="benchmark-scroll" class="benchmark-scroll">
+          <table class="benchmark-table">
+            <tbody>
+              <tr class="benchmark-category-row">
+                <th id="benchmark-category" class="benchmark-category-label" scope="row">Audio</th>
+                <td class="benchmark-category-cell"></td>
+                <td class="benchmark-category-cell"></td>
+              </tr>
+              <tr id="benchmark-hover-row">
+                <th scope="row">Audio MC</th>
+                <td>56.6%</td>
+                <td>66.8%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </main>
   </body>

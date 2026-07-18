@@ -1,14 +1,15 @@
-import {mapColor, mapCssGradient} from '../color/index';
 import type {ThemeConfig} from '../types';
 import {
   beginDomStyleUpdate,
-  DOM_ATTRIBUTE as ATTR,
-  DOM_VARIABLE as VAR,
   domOverrideCss,
   endDomStyleUpdate,
 } from './dom-style-contract';
+import {DomStateObserver} from './dom-state-observer';
+import {mapElementStyles, restoreElementStyles} from './dom-style-mapper';
 
 type SchedulableRoot = Document | ShadowRoot;
+const MAX_INTERACTION_ELEMENTS = 64;
+const MAX_INTERACTION_CHILDREN = 24;
 
 interface IdleDeadlineLike {
   didTimeout: boolean;
@@ -22,15 +23,6 @@ function scheduleIdle(callback: (deadline: IdleDeadlineLike) => void): number {
   return window.setTimeout(() => callback({didTimeout: true, timeRemaining: () => 0}), 0);
 }
 
-function isTransparent(color: string): boolean {
-  const normalized = color.replaceAll(' ', '').toLowerCase();
-  return normalized === 'transparent' ||
-    normalized === 'rgba(0,0,0,0)' ||
-    normalized.endsWith(',0)') ||
-    normalized.endsWith('/0)') ||
-    normalized.endsWith('/0%)');
-}
-
 function shouldSkip(element: Element): boolean {
   return element instanceof SVGElement ||
     element instanceof HTMLStyleElement ||
@@ -40,29 +32,19 @@ function shouldSkip(element: Element): boolean {
     element instanceof HTMLHeadElement;
 }
 
-function ownsRenderedText(element: HTMLElement): boolean {
-  if (element.matches('input, textarea, select, option, button')) return true;
-  return [...element.childNodes].some((node) =>
-    node.nodeType === Node.TEXT_NODE && (node.textContent?.trim().length ?? 0) > 0
-  );
-}
-
-function hasVisibleBorder(style: CSSStyleDeclaration): boolean {
-  return ['Top', 'Right', 'Bottom', 'Left'].some((side) => {
-    const width = Number.parseFloat(style.getPropertyValue(`border-${side.toLowerCase()}-width`));
-    const kind = style.getPropertyValue(`border-${side.toLowerCase()}-style`);
-    return width > 0 && kind !== 'none' && kind !== 'hidden';
-  });
-}
-
-function inheritedMappedBackground(element: HTMLElement, fallback: string): string {
-  let current: HTMLElement | null = element.parentElement;
+function composedElementDepth(element: HTMLElement): number {
+  let current: Element | null = element;
+  let depth = 0;
   while (current) {
-    const mapped = current.style.getPropertyValue(VAR.background);
-    if (mapped) return mapped;
-    current = current.parentElement;
+    depth += 1;
+    if (current.parentElement) {
+      current = current.parentElement;
+      continue;
+    }
+    const root = current.getRootNode();
+    current = root instanceof ShadowRoot ? root.host : null;
   }
-  return fallback;
+  return depth;
 }
 
 function ensureOverrideStyle(root: SchedulableRoot): void {
@@ -82,6 +64,7 @@ export class DomThemeEngine {
   private config: ThemeConfig;
   private readonly roots = new Set<SchedulableRoot>();
   private readonly observers = new Map<SchedulableRoot, MutationObserver>();
+  private readonly stateObservers = new Map<SchedulableRoot, DomStateObserver>();
   private readonly touched = new Set<HTMLElement>();
   private queue: Element[] = [];
   private queued = new WeakSet<Element>();
@@ -115,6 +98,8 @@ export class DomThemeEngine {
     this.enabled = false;
     for (const observer of this.observers.values()) observer.disconnect();
     this.observers.clear();
+    for (const observer of this.stateObservers.values()) observer.stop();
+    this.stateObservers.clear();
     for (const root of this.roots) removeOverrideStyle(root);
     this.roots.clear();
     this.queue = [];
@@ -150,23 +135,29 @@ export class DomThemeEngine {
     });
     observer.observe(root, {subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'color', 'bgcolor']});
     this.observers.set(root, observer);
+    const stateObserver = new DomStateObserver(root, (elements) => this.invalidateStates(elements));
+    stateObserver.start();
+    this.stateObservers.set(root, stateObserver);
     if (root instanceof Document) this.enqueue(root.documentElement);
     else for (const child of root.children) this.enqueue(child);
   }
 
   private enqueue(root: Element): void {
-    if (!this.enabled || this.queued.has(root)) return;
+    if (!this.enabled) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
     let current: Node | null = root;
     while (current) {
       const element = current as Element;
-      if (!this.queued.has(element)) {
-        this.queued.add(element);
-        this.queue.push(element);
-      }
+      this.enqueueOne(element);
       current = walker.nextNode();
     }
     if (this.idleHandle == null) this.idleHandle = scheduleIdle((deadline) => this.drain(deadline));
+  }
+
+  private enqueueOne(element: Element): void {
+    if (this.queued.has(element)) return;
+    this.queued.add(element);
+    this.queue.push(element);
   }
 
   private drain(deadline: IdleDeadlineLike): void {
@@ -174,6 +165,7 @@ export class DomThemeEngine {
     let processed = 0;
     while (this.queue.length > 0 && (processed < 80 || deadline.timeRemaining() > 2)) {
       const element = this.queue.shift()!;
+      if (!this.queued.has(element)) continue;
       this.queued.delete(element);
       this.processElement(element);
       processed += 1;
@@ -188,76 +180,38 @@ export class DomThemeEngine {
 
     beginDomStyleUpdate(element);
     try {
-      this.mapElement(element);
+      if (mapElementStyles(element, this.config)) this.touched.add(element);
     } finally {
       endDomStyleUpdate(element);
     }
   }
 
-  private mapElement(element: HTMLElement): void {
-    const style = getComputedStyle(element);
-    if (style.display === 'none' || style.visibility === 'hidden') return;
-    const canvasElement = element === document.documentElement || element === document.body;
-    const background = isTransparent(style.backgroundColor)
-      ? inheritedMappedBackground(element, this.config.background)
-      : canvasElement
-        ? this.config.background
-        : mapColor(style.backgroundColor, {role: 'surface', background: this.config.background});
-    const gradient = mapCssGradient(style.backgroundImage, this.config.background);
-
-    if (!isTransparent(style.backgroundColor)) {
-      element.style.setProperty(VAR.background, background);
-      element.setAttribute(ATTR.background, '');
-    }
-    if (gradient) {
-      element.style.setProperty(VAR.backgroundImage, gradient.css);
-      element.setAttribute(ATTR.backgroundImage, '');
-    }
-
-    const readabilityBackground = gradient?.readabilityBackground ?? background;
-
-    const parentColor = element.parentElement?.hasAttribute(ATTR.color)
-      ? getComputedStyle(element.parentElement).color
-      : null;
-    const inheritsMappedColor = parentColor != null && parentColor === style.color;
-    if (ownsRenderedText(element) && !inheritsMappedColor && !isTransparent(style.color)) {
-      element.style.setProperty(VAR.color, mapColor(style.color, {
-        role: 'text',
-        background: readabilityBackground,
-        minContrast: this.config.minimumTextContrast,
-        preserveHue: true,
-      }));
-      element.setAttribute(ATTR.color, '');
-    }
-
-    if (hasVisibleBorder(style)) {
-      for (const [side, variable] of [
-        ['top', VAR.borderTop], ['right', VAR.borderRight],
-        ['bottom', VAR.borderBottom], ['left', VAR.borderLeft],
-      ] as const) {
-        element.style.setProperty(variable, mapColor(style.getPropertyValue(`border-${side}-color`), {
-          role: 'border', background: readabilityBackground, minContrast: 3, preserveHue: true,
-        }));
+  private invalidateStates(elements: readonly HTMLElement[]): void {
+    if (!this.enabled) return;
+    const path = elements.filter((element) => element.isConnected)
+      .slice(0, MAX_INTERACTION_ELEMENTS);
+    const affected = new Set(path);
+    for (const element of path) {
+      if (element.children.length > MAX_INTERACTION_CHILDREN) continue;
+      for (const child of element.children) {
+        if (affected.size >= MAX_INTERACTION_ELEMENTS) break;
+        if (child instanceof HTMLElement) affected.add(child);
       }
-      element.setAttribute(ATTR.border, '');
+      if (affected.size >= MAX_INTERACTION_ELEMENTS) break;
     }
-
-    if (style.textDecorationLine !== 'none' || style.caretColor !== 'auto') {
-      element.style.setProperty(VAR.decoration, mapColor(style.textDecorationColor, {
-        role: 'accent', background: readabilityBackground, minContrast: 3, preserveHue: true,
-      }));
-      element.style.setProperty(VAR.caret, mapColor(style.caretColor === 'auto' ? style.color : style.caretColor, {
-        role: 'text', background: readabilityBackground,
-        minContrast: this.config.minimumTextContrast, preserveHue: true,
-      }));
-      element.setAttribute(ATTR.decoration, '');
+    const ordered = [...affected].sort((first, second) =>
+      composedElementDepth(first) - composedElementDepth(second)
+    );
+    for (const element of ordered) this.queued.delete(element);
+    for (const element of ordered) {
+      restoreElementStyles(element);
+      this.touched.delete(element);
+      this.processElement(element);
     }
-    this.touched.add(element);
   }
 
   private restoreElement(element: HTMLElement): void {
-    for (const attribute of Object.values(ATTR)) element.removeAttribute(attribute);
-    for (const variable of Object.values(VAR)) element.style.removeProperty(variable);
+    restoreElementStyles(element);
   }
 
   private resetTouchedElements(): void {

@@ -8,6 +8,9 @@ relationships, raster diagrams, and ordinary images take separate paths.
 
 - HTML backgrounds, surfaces, text, borders, decoration, and caret colors are
   mapped in OKLCH through reversible extension-owned CSS variables.
+- Generated `::before`/`::after` surfaces, gradients, text, and borders use the
+  same semantic mapping. Common path-local pointer and keyboard-focus state
+  changes are re-sampled before their first rendered frame.
 - CSS gradients keep their geometry and transparent gutters while solid color
   stops are remapped. Text contrast is checked against the brightest resulting
   stop, covering table headers and callouts that use light gradient bands.
@@ -66,10 +69,11 @@ E2E requires a locally installed Chrome. macOS uses the standard application
 path automatically; elsewhere set `CHROME_PATH=/absolute/path/to/chrome`.
 
 The E2E test starts a local fixture with a strict worker CSP, launches a
-temporary system-Chrome profile with only this extension, checks DOM/SVG/gradient
-contrast, confirms authored dark pages remain untouched, audits popup target
-sizes in light and dark appearances, measures raster-worker timing, toggles the
-site through the real popup, and writes screenshots to `artifacts/`.
+temporary system-Chrome profile with only this extension, checks
+DOM/SVG/gradient/pseudo-element contrast, exercises hover-state restoration,
+confirms authored dark pages remain untouched, audits popup target sizes in
+light and dark appearances, measures raster-worker timing, toggles the site
+through the real popup, and writes screenshots to `artifacts/`.
 
 ## ML status
 
@@ -95,9 +99,13 @@ colors remain governed by the deterministic contrast and palette solvers.
 
 - Cross-origin stylesheet fetching and recursive `@import` rewriting are not
   implemented.
-- Pseudo-elements, closed/UA shadow roots, external SVG internals, bitmap CSS
-  background images, cross-origin tainted pixels, canvas, WebGL, and video are
-  not semantically rewritten. Computed CSS gradients are supported.
+- Pseudo-elements other than `::before`/`::after`, closed/UA shadow roots,
+  external SVG internals, bitmap CSS background images, cross-origin tainted
+  pixels, canvas, WebGL, and video are not semantically rewritten. Computed CSS
+  gradients are supported.
+- Interaction refresh is deliberately bounded to the composed event path and
+  small direct-child sets. Deep descendant or broad sibling selectors driven
+  only by `:hover`/`:focus` can still require a later CSS-selector-aware pass.
 - Source-probe transition suppression is document-scoped. Open shadow content
   is mapped, but an authored color transition inside it may still play while
   automatic mode activates or restores the site's own theme.

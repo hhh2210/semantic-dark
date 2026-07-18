@@ -7,13 +7,18 @@ import {
   parseRgbColors,
   relativeLuminance,
 } from './colors.mjs';
+import {
+  readDomEffectState,
+  verifyBaselineDomEffects,
+  verifyTransformedDomEffects,
+} from './dom-effects.mjs';
 
 const DARK_BACKGROUND = [17, 20, 22];
 const SOURCE_FILL = [74, 79, 87];
 const SOURCE_STROKE = [255, 255, 255];
 
 export async function readPageState(page) {
-  return page.evaluate(() => {
+  const state = await page.evaluate(() => {
     const required = (selector) => {
       const element = document.querySelector(selector);
       if (!element) throw new Error(`Fixture element is missing: ${selector}`);
@@ -60,6 +65,7 @@ export async function readPageState(page) {
       categoryText: categoryStyle.color,
     };
   });
+  return {...state, domEffects: await readDomEffectState(page)};
 }
 
 export async function waitForProcessedState(page, timeout = 15_000) {
@@ -124,6 +130,7 @@ export function verifyBaselineState(state) {
     `Baseline raster src changed unexpectedly: ${state.diagramSrc}`);
   assert.equal(state.diagramUsesBlob, false, 'Baseline raster image unexpectedly uses a Blob URL');
   expectLightSourceGradient(state, 'Baseline');
+  verifyBaselineDomEffects(state.domEffects);
 }
 
 export function verifyTransformedState(state) {
@@ -188,6 +195,7 @@ export function verifyTransformedState(state) {
     `Category gradient remained too light: ${state.categoryGradientVariable}`);
   assert.ok(contrastRatio(categoryText, brightestStop) >= 4.5,
     `Category text/gradient contrast is ${contrastRatio(categoryText, brightestStop).toFixed(2)}`);
+  verifyTransformedDomEffects(state.domEffects);
 
   return {
     svgFillStrokeContrast: Number(contrastRatio(fill, stroke).toFixed(2)),
@@ -226,6 +234,7 @@ export function verifyRestoredState(state) {
   assert.equal(state.categoryGradientProcessed, false,
     'Gradient category marker remained after disabling the host');
   expectLightSourceGradient(state, 'Restored');
+  verifyBaselineDomEffects(state.domEffects, 'Restored');
 }
 
 export async function readNativeDarkState(page) {
