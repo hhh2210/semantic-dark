@@ -24,6 +24,34 @@ const SPECTRUM_SCHEMA_PACKAGE = {
   license: 'Apache-2.0', repository: 'https://github.com/adobe/spectrum-design-data',
 } as const;
 
+const CARBON_PACKAGE = {
+  name: '@carbon/themes', version: '11.77.0',
+  integrity: 'sha512-5MGfcWiKwpIAmmtq4zlAeSkGkECaVXhr61Ol0EUFQskUlhAgeKhlIc5iWXFmwDb25oxzEFo0puH+GKsLL4GN/w==',
+  license: 'Apache-2.0', repository: 'https://github.com/carbon-design-system/carbon',
+} as const;
+
+const FLUENT_PACKAGE = {
+  name: '@fluentui/react-theme', version: '9.2.1',
+  integrity: 'sha512-lJxfz7LmmglFz+c9C41qmMqaRRZZUPtPPl9DWQ79vH+JwZd4dkN7eA78OTRwcGCOTPEKoLTX72R+EFaWEDlX+w==',
+  license: 'MIT', repository: 'https://github.com/microsoft/fluentui',
+} as const;
+
+export const CARBON_TOKEN_SELECTORS: FrozenTokenSelectors = {
+  canvas: 'background', surface: 'layer01', surfaceRaised: 'layer02',
+  textPrimary: 'textPrimary', textSecondary: 'textSecondary', tableHeader: 'layerAccent01',
+  selectedSurface: 'layerSelected01', border: 'borderSubtle01', focus: 'focus',
+  dangerSurface: 'notificationBackgroundError', dangerText: 'textPrimary',
+};
+
+export const FLUENT_TOKEN_SELECTORS: FrozenTokenSelectors = {
+  canvas: 'colorNeutralBackground1', surface: 'colorNeutralBackground2',
+  surfaceRaised: 'colorNeutralBackground3', textPrimary: 'colorNeutralForeground1',
+  textSecondary: 'colorNeutralForeground2', tableHeader: 'colorNeutralBackground3',
+  selectedSurface: 'colorSubtleBackgroundSelected', border: 'colorNeutralStroke1',
+  focus: 'colorStrokeFocus2', dangerSurface: 'colorPaletteRedBackground1',
+  dangerText: 'colorNeutralForeground1',
+};
+
 export const SPECTRUM_TOKEN_PATHS = [
   'tokens/color-palette.tokens.json',
   'tokens/semantic-color-palette.tokens.json',
@@ -72,7 +100,27 @@ export function validateProtocolSource(value: unknown): void {
     }, 'Spectrum schema contract');
     return;
   }
-  throw new Error('M1 accepts only Material, Primer, or Spectrum reference sources');
+  if (source.system === 'carbon' && source.kind === 'exported-theme-object') {
+    exactKeys(source, ['system', 'kind', 'package', 'lightExport', 'darkExport', 'tokens'],
+      'Carbon source');
+    validatePackagePin(source.package, CARBON_PACKAGE, 'Carbon');
+    if (source.lightExport !== 'white' || source.darkExport !== 'g100') {
+      throw new Error('Carbon theme exports differ from the preregistered pair');
+    }
+    exactRecord(source.tokens, CARBON_TOKEN_SELECTORS, 'Carbon token selectors');
+    return;
+  }
+  if (source.system === 'fluent' && source.kind === 'exported-theme-object') {
+    exactKeys(source, ['system', 'kind', 'package', 'lightExport', 'darkExport', 'tokens'],
+      'Fluent source');
+    validatePackagePin(source.package, FLUENT_PACKAGE, 'Fluent');
+    if (source.lightExport !== 'webLightTheme' || source.darkExport !== 'webDarkTheme') {
+      throw new Error('Fluent theme exports differ from the preregistered pair');
+    }
+    exactRecord(source.tokens, FLUENT_TOKEN_SELECTORS, 'Fluent token selectors');
+    return;
+  }
+  throw new Error('Unsupported paired-theme source contract');
 }
 
 function validatePackagePin(
@@ -116,3 +164,4 @@ function object(value: unknown, label: string): Record<string, unknown> {
   }
   return value as Record<string, unknown>;
 }
+import {NORMALIZED_TOKEN_NAMES, type FrozenTokenSelectors} from './types';

@@ -1,4 +1,9 @@
 allowBuilds:
+  '@carbon/colors': false
+  '@carbon/grid': false
+  '@carbon/layout': false
+  '@carbon/themes': false
+  '@carbon/type': false
   esbuild: true
 minimumReleaseAgeExclude:
   - '@adobe/spectrum-design-data@0.12.0'

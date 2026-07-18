@@ -74,10 +74,33 @@ export interface SpectrumProtocolSource {
   };
 }
 
+export type FrozenTokenSelectors = Readonly<Record<NormalizedTokenName, string>>;
+
+export interface CarbonProtocolSource {
+  system: 'carbon';
+  kind: 'exported-theme-object';
+  package: PackagePin;
+  lightExport: 'white';
+  darkExport: 'g100';
+  tokens: FrozenTokenSelectors;
+}
+
+export interface FluentProtocolSource {
+  system: 'fluent';
+  kind: 'exported-theme-object';
+  package: PackagePin;
+  lightExport: 'webLightTheme';
+  darkExport: 'webDarkTheme';
+  tokens: FrozenTokenSelectors;
+}
+
 export type DevelopmentProtocolSource =
   | MaterialProtocolSource
   | PrimerProtocolSource
   | SpectrumProtocolSource;
+
+export type HeldOutProtocolSource = CarbonProtocolSource | FluentProtocolSource;
+export type PairedThemeProtocolSource = DevelopmentProtocolSource | HeldOutProtocolSource;
 
 export interface PairedThemeMetricConfig {
   status: 'development-draft' | 'frozen-v1';
