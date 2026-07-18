@@ -1,6 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {NORMALIZED_TOKEN_NAMES, type PaintDecision, type PairedThemeProtocol, type SceneDefinition, type SceneManifest} from './types';
+import {validateProtocolSource} from './protocol-source';
 
 const ROLES = new Set(['background', 'surface', 'text', 'border', 'accent', 'svgFill', 'svgStroke']);
 const PROPERTIES = new Set(['background-color', 'color', 'border-color', 'outline-color']);
@@ -38,7 +39,7 @@ export function validateProtocol(value: unknown): PairedThemeProtocol {
     throw new Error('Unsupported paired-theme protocol schema');
   }
   if (input.split !== 'development') throw new Error('M1a accepts development protocols only');
-  validateSource(input.source);
+  validateProtocolSource(input.source);
   const viewport = object(input.viewport, 'protocol.viewport');
   const limits = object(input.limits, 'protocol.limits');
   const metric = object(input.metric, 'protocol.metric');
@@ -77,61 +78,6 @@ export function validateProtocol(value: unknown): PairedThemeProtocol {
     throw new Error('Protocol exceeds the M1 scene or reviewed-decision ceiling');
   }
   return protocol;
-}
-
-function validateSource(value: unknown): void {
-  const source = object(value, 'protocol.source');
-  if (source.system === 'material' && source.kind === 'generated-scheme') {
-    exactKeys(source, ['system', 'kind', 'package', 'generator'], 'Material source');
-    const packagePin = validatePackagePin(source.package);
-    if (packagePin.name !== '@material/material-color-utilities' ||
-        packagePin.version !== '0.4.0' || packagePin.license !== 'Apache-2.0') {
-      throw new Error('Material source package differs from the audited 0.4.0 pin');
-    }
-    const generator = object(source.generator, 'Material generator');
-    exactKeys(generator, ['seed', 'variant', 'specVersion', 'platform', 'contrastLevel'],
-      'Material generator');
-    if (typeof generator.seed !== 'string' || !/^#[0-9a-f]{6}$/i.test(generator.seed) ||
-        generator.variant !== 'tonal-spot' || generator.specVersion !== '2021' ||
-        generator.platform !== 'phone' || number(generator.contrastLevel, 'contrastLevel') !== 0) {
-      throw new Error('Invalid Material generator configuration');
-    }
-    return;
-  }
-  if (source.system === 'primer' && source.kind === 'static-token-json') {
-    exactKeys(source, ['system', 'kind', 'package', 'lightPath', 'darkPath'], 'Primer source');
-    const packagePin = validatePackagePin(source.package);
-    if (packagePin.name !== '@primer/primitives' || packagePin.version !== '11.9.0' ||
-        packagePin.license !== 'MIT') {
-      throw new Error('Primer source package differs from the audited 11.9.0 pin');
-    }
-    if (source.lightPath !== 'dist/docs/functional/themes/light.json' ||
-        source.darkPath !== 'dist/docs/functional/themes/dark.json') {
-      throw new Error('Primer source paths differ from the frozen resolved themes');
-    }
-    return;
-  }
-  throw new Error('M1 accepts only Material generated-scheme or Primer static-token-json input');
-}
-
-function validatePackagePin(value: unknown): Record<string, unknown> {
-  const packagePin = object(value, 'source package pin');
-  exactKeys(packagePin, ['name', 'version', 'integrity', 'license', 'repository'],
-    'source package pin');
-  for (const key of ['name', 'version', 'integrity', 'license', 'repository'] as const) {
-    if (typeof packagePin[key] !== 'string' || packagePin[key].length === 0) {
-      throw new Error(`Package pin ${key} must be a non-empty string`);
-    }
-  }
-  return packagePin;
-}
-
-function exactKeys(value: Record<string, unknown>, expected: readonly string[], label: string): void {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
-  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
-    throw new Error(`${label} has an unexpected shape`);
-  }
 }
 
 export function validateSceneManifest(

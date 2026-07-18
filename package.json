@@ -24,6 +24,8 @@
     "verify": "pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
+    "@adobe/design-data-spec": "2.8.0",
+    "@adobe/spectrum-design-data": "0.12.0",
     "@material/material-color-utilities": "0.4.0",
     "@primer/primitives": "11.9.0",
     "@types/chrome": "0.2.2",

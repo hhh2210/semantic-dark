@@ -54,7 +54,30 @@ export interface PrimerProtocolSource {
   darkPath: 'dist/docs/functional/themes/dark.json';
 }
 
-export type DevelopmentProtocolSource = MaterialProtocolSource | PrimerProtocolSource;
+export interface SpectrumProtocolSource {
+  system: 'spectrum';
+  kind: 'cascade-token-json';
+  package: PackagePin;
+  schemaPackage: PackagePin;
+  tokenPaths: readonly [
+    'tokens/color-palette.tokens.json',
+    'tokens/semantic-color-palette.tokens.json',
+    'tokens/color-aliases.tokens.json',
+    'tokens/color-component.tokens.json',
+  ];
+  modeSetPath: 'mode-sets/color-scheme.json';
+  modes: {light: 'light'; dark: 'dark'};
+  schema: {
+    specVersion: '1.0.0-draft';
+    tokenSchemaId: 'https://opensource.adobe.com/spectrum-design-data/schemas/v0/token.schema.json';
+    modeSetSchemaId: 'https://opensource.adobe.com/spectrum-design-data/schemas/v0/mode-set.schema.json';
+  };
+}
+
+export type DevelopmentProtocolSource =
+  | MaterialProtocolSource
+  | PrimerProtocolSource
+  | SpectrumProtocolSource;
 
 export interface PairedThemeMetricConfig {
   status: 'development-draft' | 'frozen-v1';
@@ -124,6 +147,7 @@ export interface NormalizedTokenPair {
   dark: string;
   sourceToken: string;
   provenance: 'generator-derived' | 'authored-token';
+  resolutionPath?: {light: readonly string[]; dark: readonly string[]};
 }
 
 export interface NormalizedThemePair {

@@ -1,5 +1,6 @@
 import {materialThemePair, normalizedTokenHash} from './material';
 import {primerThemePair} from './primer';
+import {spectrumThemePair} from './spectrum';
 import type {NormalizedThemePair, PairedThemeProtocol} from './types';
 
 export interface ResolvedPairedThemeSource {
@@ -18,6 +19,10 @@ export function resolvePairedThemeSource(
     }
     case 'primer': {
       const theme = primerThemePair(source);
+      return {theme, normalizedTokensSha256: normalizedTokenHash(theme)};
+    }
+    case 'spectrum': {
+      const theme = spectrumThemePair(source);
       return {theme, normalizedTokensSha256: normalizedTokenHash(theme)};
     }
   }

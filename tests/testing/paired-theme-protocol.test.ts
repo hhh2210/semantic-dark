@@ -8,13 +8,16 @@ import {
   validateSceneManifest,
 } from '../../src/testing/paired-theme/protocol';
 import type {SceneDefinition} from '../../src/testing/paired-theme/types';
+import spectrumProtocol from '../../fixtures/paired-theme/spectrum-v1.protocol.json';
 
 const limits = {maxScenes: 24, maxReviewedDecisions: 50};
 const materialSource = {
   system: 'material', kind: 'generated-scheme',
   package: {
     name: '@material/material-color-utilities', version: '0.4.0',
-    integrity: 'sha512-test', license: 'Apache-2.0', repository: 'material-repo',
+    integrity: 'sha512-dlq6VExJReb8dhjj3a/yTigr3ncNwoFmL5Iy2ENtbDX03EmNeOEdZ+vsaGrj7RTuO+mB7L58II4LCsl4NpM8uw==',
+    license: 'Apache-2.0',
+    repository: 'https://github.com/material-foundation/material-color-utilities',
   },
   generator: {seed: '#6750A4', variant: 'tonal-spot', specVersion: '2021',
     platform: 'phone', contrastLevel: 0},
@@ -22,8 +25,9 @@ const materialSource = {
 const primerSource = {
   system: 'primer', kind: 'static-token-json',
   package: {
-    name: '@primer/primitives', version: '11.9.0', integrity: 'sha512-test',
-    license: 'MIT', repository: 'primer-repo',
+    name: '@primer/primitives', version: '11.9.0',
+    integrity: 'sha512-yESOalhd7s7S3unV1V32v3Z0RszXiiz6pzy6hVI9xpdTh1q1Gt8vyDFxRlqIvuwc5ZaO1+gYQTDbjxb4nWBzMw==',
+    license: 'MIT', repository: 'https://github.com/primer/primitives',
   },
   lightPath: 'dist/docs/functional/themes/light.json',
   darkPath: 'dist/docs/functional/themes/dark.json',
@@ -121,6 +125,21 @@ describe('paired-theme protocol validation', () => {
       lightPath: 'dist/docs/functional/themes/dark.json'}})).toThrow(/source paths/);
     expect(() => validateProtocol({...protocol, source: {...primerSource,
       package: {...primerSource.package, extra: 'drift'}}})).toThrow(/unexpected shape/);
+  });
+
+  it('accepts the exact Spectrum cascade contract and rejects ordered-path drift', () => {
+    const protocol = validateProtocol(spectrumProtocol);
+    expect(protocol.source.system).toBe('spectrum');
+    if (protocol.source.system !== 'spectrum') throw new Error('Expected Spectrum source');
+    const source = protocol.source;
+    expect(() => validateProtocol({...protocol, source: {
+      ...source,
+      tokenPaths: [...source.tokenPaths].reverse(),
+    }})).toThrow(/token paths/);
+    expect(() => validateProtocol({...protocol, source: {
+      ...source,
+      schema: {...source.schema, specVersion: 'future'},
+    }})).toThrow(/schema contract/);
   });
 
   it('resolves the scene manifest relative to the protocol and blocks path escape', async () => {

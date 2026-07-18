@@ -1,0 +1,53 @@
+{
+  "schema": "semantic-dark.paired-theme-protocol.v1",
+  "id": "spectrum-design-data-0.12.0-v1",
+  "split": "development",
+  "source": {
+    "system": "spectrum",
+    "kind": "cascade-token-json",
+    "package": {
+      "name": "@adobe/spectrum-design-data",
+      "version": "0.12.0",
+      "integrity": "sha512-R1Nso0lDPrev//uBuxWlTsCZ1aJtlNxnF0rTnEYr9ykgzeMI9sw9nWakmqWFcy+KzF39kncDxkIOG6en/UyWQA==",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/adobe/spectrum-design-data"
+    },
+    "schemaPackage": {
+      "name": "@adobe/design-data-spec",
+      "version": "2.8.0",
+      "integrity": "sha512-4S1ZKkVEb6VCv9xZO2Uvp2R7yxjGSsUCRJXRaEriOS0GgNMD1N/sW2p0vf8QVIs6bJSbFxAQOsRwuKbbFskirg==",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/adobe/spectrum-design-data"
+    },
+    "tokenPaths": [
+      "tokens/color-palette.tokens.json",
+      "tokens/semantic-color-palette.tokens.json",
+      "tokens/color-aliases.tokens.json",
+      "tokens/color-component.tokens.json"
+    ],
+    "modeSetPath": "mode-sets/color-scheme.json",
+    "modes": {"light": "light", "dark": "dark"},
+    "schema": {
+      "specVersion": "1.0.0-draft",
+      "tokenSchemaId": "https://opensource.adobe.com/spectrum-design-data/schemas/v0/token.schema.json",
+      "modeSetSchemaId": "https://opensource.adobe.com/spectrum-design-data/schemas/v0/mode-set.schema.json"
+    }
+  },
+  "sceneManifest": "./common-scenes.v1.json",
+  "viewport": {"width": 1280, "height": 900, "deviceScaleFactor": 1},
+  "locale": "en-US",
+  "colorProfile": "srgb",
+  "limits": {"maxScenes": 24, "maxReviewedDecisions": 50},
+  "metric": {
+    "status": "development-draft",
+    "deltaEOkCap": 0.1,
+    "contrastLog2Cap": 1,
+    "rankTieEpsilon": 0.01,
+    "comparisonEpsilon": 1e-7,
+    "accentChromaThreshold": 0.02,
+    "textContrastFloor": 4.5,
+    "nonTextContrastFloor": 3,
+    "surfaceSeparationFloor": 1.12,
+    "componentWeights": {"color": 0.3333333333333333, "contrast": 0.3333333333333333, "rank": 0.3333333333333334}
+  }
+}
