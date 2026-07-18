@@ -94,6 +94,8 @@ see [ml/README.md](ml/README.md) for CNN reproduction.
 
 The model, if eventually adopted, will only choose a routing policy. Final
 colors remain governed by the deterministic contrast and palette solvers.
+The [development plan](PLAN.md) explains the deliberately small paired-theme
+testbed and the evidence required before any device model can affect rendering.
 
 ## Known boundaries
 
