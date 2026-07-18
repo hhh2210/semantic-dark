@@ -110,6 +110,9 @@ function readSelectedOpacity(
 function withAlpha(resolution: SpectrumColorResolution, alpha: number): string {
   const color = parseCssColor(resolution.color);
   if (!color) throw new Error(`Spectrum selected color is not parseable: ${resolution.color}`);
+  if (Math.abs(color.a - 1) > 1e-12) {
+    throw new Error('Spectrum selected source color must be opaque before component opacity');
+  }
   return formatCssColor({...color, a: alpha});
 }
 

@@ -117,7 +117,7 @@ export function contrastFinding(system: string, sceneId: string, targetId: strin
   kind: 'text' | 'non-text', observed: number, threshold: number): AutomaticFinding {
   const rule = kind === 'text' ? 'text-contrast' : 'non-text-contrast';
   return finding(system, sceneId, targetId, rule, observed, threshold,
-    `${targetId} contrast ${observed.toFixed(4)} is below ${threshold}`);
+    `${targetId} contrast ${formatBoundary(observed)} < ${formatBoundary(threshold)} required minimum`);
 }
 
 export function rankFinding(system: string, sceneId: string, targetId: string,
@@ -125,8 +125,12 @@ export function rankFinding(system: string, sceneId: string, targetId: string,
   threshold: number): AutomaticFinding {
   return finding(system, sceneId, targetId, rule, observed, threshold,
     rule === 'surface-separation'
-      ? `${targetId} separation ${observed.toFixed(4)} is below ${threshold}`
+      ? `${targetId} separation ${formatBoundary(observed)} < ${formatBoundary(threshold)} required minimum`
       : `${targetId} reverses the authored dark surface relation`);
+}
+
+function formatBoundary(value: number): string {
+  return value.toFixed(8);
 }
 
 function finding(system: string, sceneId: string, targetId: string,

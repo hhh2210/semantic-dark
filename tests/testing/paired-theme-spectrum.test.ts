@@ -67,6 +67,16 @@ describe('Spectrum paired-theme adapter', () => {
     ));
     expect(() => parseSpectrumThemePair(source, missingColor)).toThrow(/Missing Spectrum reference/);
 
+    const selectedPath = spectrumThemePair(source).tokens.selectedSurface.resolutionPath?.light;
+    const selectedTerminal = selectedPath?.at(-2);
+    expect(selectedTerminal).toBeTruthy();
+    const translucentSource = documents(source).map((document) => document.map((value) =>
+      isRecord(value) && value.uuid === selectedTerminal
+        ? {...value, value: 'rgb(59 99 251 / 0.5)'}
+        : value,
+    ));
+    expect(() => parseSpectrumThemePair(source, translucentSource)).toThrow(/must be opaque/);
+
     expect(() => spectrumThemePair({...source, tokenPaths: [...source.tokenPaths].reverse()} as
       unknown as SpectrumProtocolSource)).toThrow(/token paths/);
   });

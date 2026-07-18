@@ -98,7 +98,10 @@ export async function runPairedTheme(
   const runA = await runOnce('run-a', output, loaded, theme, variants.values, common);
   const runB = await runOnce('run-b', output, loaded, theme, variants.values, common);
   assertExact(runA.identity, runB.identity);
-  const finalReport = createPairedThemeReport([runA.evaluation], runA.provenance, {
+  const finalReport = createPairedThemeReport([{
+    evaluation: runA.evaluation,
+    provenance: runA.provenance,
+  }], {
     status: 'exact',
     comparedResultSha256: runB.report.resultSha256,
   });
@@ -169,6 +172,8 @@ async function runOnce(
   const metricPayloadSha256 = sha256Text(serializeCanonicalJson(evaluation));
   const observationsSha256 = sha256Text(serializeCanonicalJson(observations));
   const provenance: PairedThemeReportProvenance = {
+    system: theme.system,
+    split: theme.split,
     evaluatorCommit: common.evaluatorCommit,
     worktreeClean: common.worktreeClean,
     protocolId: loaded.protocol.id,
@@ -188,7 +193,7 @@ async function runOnce(
     locale: loaded.protocol.locale,
     colorProfile: loaded.protocol.colorProfile,
   };
-  const report = createPairedThemeReport([evaluation], provenance);
+  const report = createPairedThemeReport([{evaluation, provenance}]);
   const identity: RunIdentity = {
     resultSha256: report.resultSha256,
     observationsSha256,
