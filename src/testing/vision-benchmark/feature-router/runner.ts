@@ -1,6 +1,6 @@
-import {mkdir, writeFile} from 'node:fs/promises';
-import {homedir} from 'node:os';
+import {writeFile} from 'node:fs/promises';
 import path from 'node:path';
+import {prepareScratchOutput, writeJson, writeJsonLines} from '../../artifacts';
 import {assertCorpusDisjoint, loadCorpusManifests, readVerifiedPng} from '../manifest';
 import {summarizePredictions} from '../metrics';
 import {
@@ -39,7 +39,7 @@ export async function runFeatureRouterExperiment(
   if (!Number.isFinite(targetFar) || targetFar < 0 || targetFar > 1) {
     throw new RangeError('targetUnknownFalseAcceptRate must be in [0, 1]');
   }
-  const output = await prepareOutput(options.output);
+  const output = await prepareScratchOutput(options.output, 'Feature-router');
   const located = await loadCorpusManifests(options.manifests);
   assertCorpusDisjoint(located);
   const known = new Set<string>(KNOWN_LABELS);
@@ -103,9 +103,9 @@ export async function runFeatureRouterExperiment(
 
   await Promise.all([
     writeFile(path.join(output, 'model.json'), modelText, 'utf8'),
-    writePredictions(validationRows, path.join(output, 'raw-val-predictions.jsonl')),
-    writePredictions(testRows, path.join(output, 'raw-test-predictions.jsonl')),
-    writePredictions(thresholdedTest, path.join(output, 'calibrated-test-predictions.jsonl')),
+    writeJsonLines(validationRows, path.join(output, 'raw-val-predictions.jsonl')),
+    writeJsonLines(testRows, path.join(output, 'raw-test-predictions.jsonl')),
+    writeJsonLines(thresholdedTest, path.join(output, 'calibrated-test-predictions.jsonl')),
     writeJson(calibration, path.join(output, 'calibration.json')),
     writeJson(rawValidationMetrics, path.join(output, 'raw-val-metrics.json')),
     writeJson(rawTestMetrics, path.join(output, 'raw-test-metrics.json')),
@@ -149,16 +149,6 @@ async function predictSplit(
   return {rows, latencies};
 }
 
-async function prepareOutput(value: string): Promise<string> {
-  const scratch = path.resolve(homedir(), 'scratch-data');
-  const output = path.resolve(value.replace(/^~(?=$|\/)/, homedir()));
-  if (output === scratch || !output.startsWith(`${scratch}${path.sep}`)) {
-    throw new Error(`Feature-router output must be a subdirectory of ${scratch}`);
-  }
-  await mkdir(output, {recursive: true});
-  return output;
-}
-
 function latencySummary(metrics: ReturnType<typeof summarizePredictions>): {
   meanMs: number | null;
   p95Ms: number | null;
@@ -167,15 +157,4 @@ function latencySummary(metrics: ReturnType<typeof summarizePredictions>): {
     meanMs: metrics.latency?.meanMs ?? null,
     p95Ms: metrics.latency?.p95Ms ?? null,
   };
-}
-
-async function writePredictions(
-  rows: readonly PredictionRow[],
-  destination: string,
-): Promise<void> {
-  await writeFile(destination, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
-}
-
-async function writeJson(value: unknown, destination: string): Promise<void> {
-  await writeFile(destination, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }

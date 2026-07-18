@@ -1,6 +1,5 @@
-import {homedir} from 'node:os';
-import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
+import {prepareScratchOutput, writeJson, writeJsonLines} from '../artifacts';
 import {
   classifyVisualResource,
   normalizeClassScores,
@@ -37,7 +36,7 @@ export async function runHeuristicBenchmark(
   if (!Number.isFinite(options.threshold) || options.threshold < 0 || options.threshold > 1) {
     throw new RangeError('threshold must be in [0, 1]');
   }
-  const output = await prepareOutput(options.output);
+  const output = await prepareScratchOutput(options.output, 'Benchmark');
   const allRecords = await loadCorpusManifests(options.manifests);
   assertCorpusDisjoint(allRecords);
   const records = allRecords.filter((item) => item.record.target_split === options.split);
@@ -86,7 +85,7 @@ export async function runHeuristicBenchmark(
   if (options.split === 'val' || options.split === 'test') {
     assertFormalPredictionCoverage(rows, options.split);
   }
-  await writePredictions(rows, path.join(output, 'predictions.jsonl'));
+  await writeJsonLines(rows, path.join(output, 'predictions.jsonl'));
   const metrics = summarizePredictions(rows, latencies);
   await writeJson(metrics, path.join(output, 'metrics.json'));
   return metrics;
@@ -96,7 +95,7 @@ export async function summarizePredictionFile(
   predictions: string,
   outputValue: string,
 ): Promise<BenchmarkMetrics> {
-  const output = await prepareOutput(outputValue);
+  const output = await prepareScratchOutput(outputValue, 'Benchmark');
   const rows = await readPredictionFile(predictions);
   const metrics = summarizePredictions(rows);
   await writeJson(metrics, path.join(output, 'metrics.json'));
@@ -109,7 +108,7 @@ export async function runCalibratedBenchmark(
   outputValue: string,
   targetUnknownFalseAcceptRate = 0.05,
 ): Promise<{calibration: ThresholdCalibration; test: BenchmarkMetrics}> {
-  const output = await prepareOutput(outputValue);
+  const output = await prepareScratchOutput(outputValue, 'Benchmark');
   const validationRows = await readPredictionFile(validationPredictions, 'val');
   const testRows = await readPredictionFile(testPredictions, 'test');
   assertFormalPredictionCoverage(validationRows, 'val');
@@ -121,7 +120,7 @@ export async function runCalibratedBenchmark(
   );
   const thresholdedTest = applyConfidenceThreshold(testRows, calibration.threshold);
   const test = summarizePredictions(thresholdedTest);
-  await writePredictions(thresholdedTest, path.join(output, 'predictions.jsonl'));
+  await writeJsonLines(thresholdedTest, path.join(output, 'predictions.jsonl'));
   await writeJson(calibration, path.join(output, 'calibration.json'));
   await writeJson(test, path.join(output, 'metrics.json'));
   return {calibration, test};
@@ -132,7 +131,7 @@ export async function runHybridBenchmark(
   expertPredictions: string,
   outputValue: string,
 ): Promise<BenchmarkMetrics> {
-  const output = await prepareOutput(outputValue);
+  const output = await prepareScratchOutput(outputValue, 'Benchmark');
   const gateRows = await readPredictionFile(gatePredictions);
   const expertRows = await readPredictionFile(expertPredictions);
   const rows = combineGateAndExpertPredictions(gateRows, expertRows);
@@ -140,26 +139,7 @@ export async function runHybridBenchmark(
     assertFormalPredictionCoverage(rows, rows[0]!.target_split);
   }
   const metrics = summarizePredictions(rows);
-  await writePredictions(rows, path.join(output, 'predictions.jsonl'));
+  await writeJsonLines(rows, path.join(output, 'predictions.jsonl'));
   await writeJson(metrics, path.join(output, 'metrics.json'));
   return metrics;
-}
-
-async function prepareOutput(value: string): Promise<string> {
-  const scratch = path.resolve(homedir(), 'scratch-data');
-  const output = path.resolve(value.replace(/^~(?=$|\/)/, homedir()));
-  if (output === scratch || !output.startsWith(`${scratch}${path.sep}`)) {
-    throw new Error(`Benchmark output must be a subdirectory of ${scratch}`);
-  }
-  await mkdir(output, {recursive: true});
-  return output;
-}
-
-async function writePredictions(rows: readonly PredictionRow[], destination: string): Promise<void> {
-  const text = rows.map((row) => JSON.stringify(row)).join('\n');
-  await writeFile(destination, `${text}\n`, 'utf8');
-}
-
-async function writeJson(value: unknown, destination: string): Promise<void> {
-  await writeFile(destination, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
