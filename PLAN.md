@@ -35,8 +35,8 @@ We first tune the existing deterministic role profiles. A learned model is an
 optional later experiment, not the starting point.
 
 Source intake is staged rather than parallel. M1a completes one end-to-end
-vertical slice using Primer Primitives only. Material and Spectrum are admitted
-only after that slice reproduces from a clean run. Carbon and Fluent remain
+vertical slice using Material Color Utilities only. Primer and Spectrum are
+admitted in that order only after the preceding slice reproduces from a clean run. Carbon and Fluent remain
 sealed until the evaluation protocol and one candidate are committed.
 
 ## How we arrived here
@@ -238,7 +238,8 @@ report both improvements and regressions.
 
 ### M1a — Complete one-source vertical slice
 
-Using only a pinned Primer Primitives revision:
+Using only a pinned Material Color Utilities release and an explicit frozen
+seed/scheme configuration:
 
 - render four to six representative component/state scenes;
 - extract and review no more than 12 paint decisions;
@@ -250,13 +251,14 @@ This slice is allowed to refine the normalized pair schema and metric
 implementation. It is not allowed to tune `ROLE_PROFILES` or inspect Carbon or
 Fluent target results.
 
-Gate: do not add another token schema until the Primer slice has no unresolved
+Gate: do not add another token schema until the Material slice has no unresolved
 pairing, reproduction, or license ambiguity.
 
 ### M1b — Normalize the remaining tuning sources
 
-Add Material and Spectrum through source-specific adapters rather than assuming
-their token schemas or pairing semantics are interchangeable with Primer. Expand
+Add Primer and then Spectrum through source-specific adapters rather than
+assuming their token schemas or pairing semantics are interchangeable with
+Material. Expand
 only to the existing ceilings of 24 scenes and 50 reviewed decisions. At least
 20 decisions are assigned to the sealed Carbon/Fluent evaluation before their
 candidate outcomes are viewed; the remainder may be used for tuning diagnostics.
@@ -288,30 +290,33 @@ the current candidate.
 
 ### Preregistered authored-pair metric
 
-There is deliberately no weighted composite across color, contrast, hierarchy,
-and hue. Those quantities have different meanings, and weights chosen after
-seeing a design system would make the 10% gate negotiable.
-
-The single primary endpoint is `role_macro_delta_e_loss`, computed separately
-for each design system `s`. All colors below mean the effective rendered paint
-after alpha compositing against the recorded backdrop:
+The confirmatory endpoint is a preregistered composite with fixed normalization,
+equal weights, and aggregation order. It is computed separately for each design
+system `s`; no weight or threshold may change after the metric-spec commit. All
+colors below mean the effective rendered paint after alpha compositing against
+the recorded backdrop:
 
 ```text
-d_i       = Euclidean distance in OKLab(candidate_i, authored_dark_i)
-cell_loss = median(d_i) within a preregistered (role, component, state) cell
-role_loss = unweighted mean(cell_loss) over preregistered cells for that role
-L_s       = unweighted mean(role_loss) over preregistered roles in system s
-I_s       = (L_s_baseline - L_s_candidate) / L_s_baseline
+d_i = min(Euclidean OKLab distance(candidate_i, authored_dark_i) / 0.10, 1)
+c_i = min(abs(log2(candidate contrast_i / authored contrast_i)), 1)
+r_i = 0 for preserved surface order, 0.5 for a frozen-epsilon tie, 1 for inversion
+
+D_s = macro mean of median(d_i): decisions -> scenes -> roles -> system s
+C_s = macro mean of median(c_i): applicable decisions -> scenes -> roles -> system s
+R_s = mean(r_i): ordered pairs -> scenes -> system s
+E_s = (D_s + C_s + R_s) / 3
+PairScore_s = 100 * (1 - E_s)
+I_s = (E_s_baseline - E_s_candidate) / E_s_baseline
 ```
 
 Baseline and candidate use identical record IDs. An abstention is scored as the
 actual unchanged source paint. An extraction failure or missing candidate record
 is a hard failure and may not be silently dropped. Empty cells and the role list
-are resolved and committed before scoring. If `L_s_baseline` is zero, the
-candidate must also be zero and `I_s` is reported as not applicable.
+are resolved and committed before scoring. If `E_s_baseline` is zero, the
+candidate `E_s` must also be zero and `I_s` is reported as not applicable.
 
-The following are separate secondary metrics and are never reweighted into
-`L_s`:
+The component losses remain mandatory report columns and non-regression gates;
+the composite may not trade a worse component or design system for a better one:
 
 - `contrast_error`: median `abs(log2(candidate contrast / authored contrast))`,
   macro-aggregated with the same frozen cells;
@@ -322,8 +327,9 @@ The following are separate secondary metrics and are never reweighted into
   chroma eligibility threshold;
 - hard contrast, native-dark, restore, and surface-separation failure counts.
 
-Every report shows `L_s`, `I_s`, and all secondary metrics for each design
-system separately. An equal-weight system macro may be shown as a summary, but
+Every report shows `D_s`, `C_s`, `R_s`, `E_s`, `PairScore_s`, `I_s`, and all
+safety metrics for each design system separately. An equal-weight system macro
+may be shown as a summary, but
 it is descriptive only. Paint-row micro averages never select a candidate, and
 an improvement on one system cannot cancel a regression on another.
 
@@ -360,7 +366,7 @@ First compare the current hand-set values in
 regression. The search may adjust role lightness bands and chroma retention, but
 the contrast and hierarchy solver remains fixed.
 
-Candidates are selected using only Primer, Material, Spectrum, and mechanism
+Candidates are selected using only Material, Primer, Spectrum, and mechanism
 fixtures. After the candidate parameters and decision rule are committed, the
 baseline and candidate are evaluated together once on Carbon, Fluent, the
 sealed reviewed decisions, and the real-page pilot.
@@ -369,8 +375,8 @@ A candidate advances only if it:
 
 - has zero new `F`, `H2`, or `H3` regression;
 - reaches `I_s >= 10%` separately on Carbon and on Fluent;
-- passes every preregistered secondary non-inferiority margin separately on both
-  held-out systems;
+- has no regression in any of `D_s`, `C_s`, or `R_s` separately on either
+  held-out system;
 - improves at least one original failure fixture without a site-specific rule.
 
 If systems disagree or a gate is missed, the result is inconclusive or negative:
@@ -422,9 +428,9 @@ the same as safely darkening an arbitrary light-only site.
 
 ### Authored-pair agreement
 
-- per-system `role_macro_delta_e_loss` and relative improvement;
-- per-system contrast error;
-- per-system surface-rank inversion and state-separation results;
+- per-system `D_s`, `C_s`, `R_s`, `PairScore_s`, and relative error reduction;
+- per-system hard contrast results;
+- per-system surface-rank and state-separation results;
 - per-system brand/accent hue error;
 - correct recognition of `keep` or asset-swap cases.
 
@@ -447,8 +453,8 @@ This score gates runtime changes.
 Every result includes one row per design system before any equal-weight macro
 summary:
 
-| System | Split | Records/cells | Baseline `L_s` | Candidate `L_s` | `I_s` | Secondary metrics | `F/H3/H2/H1` |
-|---|---|---:|---:|---:|---:|---|---|
+| System | Split | Records/cells | `D_s` | `C_s` | `R_s` | `PairScore_s` | `F/H3/H2/H1` |
+|---|---|---:|---:|---:|---:|---:|---|
 
 The report also lists component/state denominators, abstentions, missing records,
 exclusions, and raw sentinel counts (`better`, `equivalent`, `H1 worse`, `H2+`
@@ -474,8 +480,8 @@ class that the proposed work can actually address.
 
 ## Immediate next step
 
-Complete M0, then the Primer-only M1a vertical slice. Admit Material and Spectrum
-only after it reproduces cleanly. Finish the normalized tuning set, commit the
+Complete M0, then the Material-only M1a vertical slice. Admit Primer and Spectrum
+sequentially only after the preceding source reproduces cleanly. Finish the normalized tuning set, commit the
 M1c metric contract, and select one candidate without inspecting held-out
 scores. Only that frozen candidate is evaluated once on Carbon, Fluent, sealed
 decisions, and real pages. Until those gates clear, the current deterministic

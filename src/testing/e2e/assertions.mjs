@@ -37,6 +37,10 @@ export async function readPageState(page) {
     const diagramSrc = diagram.getAttribute('src');
     const diagramCurrentSrc = diagram.currentSrc;
     const categoryStyle = getComputedStyle(category);
+    const categoryCells = [...document.querySelectorAll('.benchmark-category-cell')];
+    if (categoryCells.length !== 2) {
+      throw new Error(`Expected two benchmark category cells, received ${categoryCells.length}`);
+    }
     return {
       svgProcessed: svg.hasAttribute('data-semantic-dark-svg'),
       svgHaloCount: svg.getAttribute('data-semantic-dark-halos'),
@@ -63,6 +67,11 @@ export async function readPageState(page) {
       categoryGradient: categoryStyle.backgroundImage,
       categoryGradientVariable: category.style.getPropertyValue('--semantic-dark-background-image'),
       categoryText: categoryStyle.color,
+      categoryCells: categoryCells.map((cell) => ({
+        processed: cell.hasAttribute('data-semantic-dark-background'),
+        background: getComputedStyle(cell).backgroundColor,
+        variable: cell.style.getPropertyValue('--semantic-dark-background'),
+      })),
     };
   });
   return {...state, domEffects: await readDomEffectState(page)};
@@ -76,6 +85,7 @@ export async function waitForProcessedState(page, timeout = 15_000) {
     const image = document.querySelector('#vision-icon');
     const diagram = document.querySelector('#vision-diagram');
     const category = document.querySelector('#benchmark-category');
+    const categoryCells = [...document.querySelectorAll('.benchmark-category-cell')];
     return svg?.hasAttribute('data-semantic-dark-svg') &&
       card?.hasAttribute('data-semantic-dark-background') &&
       title?.hasAttribute('data-semantic-dark-color') &&
@@ -86,7 +96,9 @@ export async function waitForProcessedState(page, timeout = 15_000) {
       diagram?.hasAttribute('data-semantic-dark-raster-dispatch-ms') &&
       diagram?.hasAttribute('data-semantic-dark-raster-worker-ms') &&
       diagram?.getAttribute('data-semantic-dark-raster-worker') === 'dedicated' &&
-      category?.hasAttribute('data-semantic-dark-background-image');
+      category?.hasAttribute('data-semantic-dark-background-image') &&
+      categoryCells.length === 2 &&
+      categoryCells.every((cell) => cell.hasAttribute('data-semantic-dark-background'));
   }, undefined, {timeout});
 }
 
@@ -98,6 +110,7 @@ export async function waitForRestoredState(page, timeout = 15_000) {
     const image = document.querySelector('#vision-icon');
     const diagram = document.querySelector('#vision-diagram');
     const category = document.querySelector('#benchmark-category');
+    const categoryCells = [...document.querySelectorAll('.benchmark-category-cell')];
     return svg && card && title && image && diagram && category &&
       !svg.hasAttribute('data-semantic-dark-svg') &&
       !svg.hasAttribute('data-semantic-dark-halos') &&
@@ -112,6 +125,8 @@ export async function waitForRestoredState(page, timeout = 15_000) {
       !diagram.hasAttribute('data-semantic-dark-raster-worker-ms') &&
       !diagram.hasAttribute('data-semantic-dark-raster-worker') &&
       !category.hasAttribute('data-semantic-dark-background-image') &&
+      categoryCells.length === 2 &&
+      categoryCells.every((cell) => !cell.hasAttribute('data-semantic-dark-background')) &&
       diagram.getAttribute('src') === '/raster-diagram.svg' &&
       !diagram.currentSrc.startsWith('blob:');
   }, undefined, {timeout});
@@ -130,6 +145,7 @@ export function verifyBaselineState(state) {
     `Baseline raster src changed unexpectedly: ${state.diagramSrc}`);
   assert.equal(state.diagramUsesBlob, false, 'Baseline raster image unexpectedly uses a Blob URL');
   expectLightSourceGradient(state, 'Baseline');
+  verifySourceCategoryCells(state, 'Baseline');
   verifyBaselineDomEffects(state.domEffects);
 }
 
@@ -195,6 +211,17 @@ export function verifyTransformedState(state) {
     `Category gradient remained too light: ${state.categoryGradientVariable}`);
   assert.ok(contrastRatio(categoryText, brightestStop) >= 4.5,
     `Category text/gradient contrast is ${contrastRatio(categoryText, brightestStop).toFixed(2)}`);
+  assert.equal(state.categoryCells.length, 2, 'Expected two mapped category cells');
+  for (const [index, cell] of state.categoryCells.entries()) {
+    assert.equal(cell.processed, true, `Category cell ${index} was not mapped`);
+    assert.notEqual(cell.variable, '', `Category cell ${index} is missing its mapped variable`);
+    assert.ok(relativeLuminance(parseRgb(cell.background)) < 0.2,
+      `Category cell ${index} remained too light: ${cell.background}`);
+  }
+  assert.ok(colorsNear(
+    parseRgb(state.categoryCells[0].background),
+    parseRgb(state.categoryCells[1].background),
+  ), 'Mapped category cells no longer form one continuous surface');
   verifyTransformedDomEffects(state.domEffects);
 
   return {
@@ -233,7 +260,10 @@ export function verifyRestoredState(state) {
   assert.equal(state.diagramUsesBlob, false, 'Raster image still uses a Blob URL after restoration');
   assert.equal(state.categoryGradientProcessed, false,
     'Gradient category marker remained after disabling the host');
+  assert.equal(state.categoryGradientVariable, '',
+    'Gradient category variable remained after disabling the host');
   expectLightSourceGradient(state, 'Restored');
+  verifySourceCategoryCells(state, 'Restored');
   verifyBaselineDomEffects(state.domEffects, 'Restored');
 }
 
@@ -310,4 +340,14 @@ function expectLightSourceGradient(state, label) {
   const stops = parseRgbColors(state.categoryGradient);
   assert.ok(stops.some((stop) => relativeLuminance(stop) > 0.8),
     `${label} category gradient is not the light authored gradient: ${state.categoryGradient}`);
+}
+
+function verifySourceCategoryCells(state, label) {
+  assert.equal(state.categoryCells.length, 2, `${label} category cell count changed`);
+  for (const [index, cell] of state.categoryCells.entries()) {
+    assert.equal(cell.processed, false, `${label} category cell ${index} was already processed`);
+    assert.equal(cell.variable, '', `${label} category cell ${index} retained a mapped variable`);
+    assert.ok(colorsNear(parseRgb(cell.background), [243, 243, 243]),
+      `${label} category cell ${index} is not the authored #f3f3f3 surface: ${cell.background}`);
+  }
 }

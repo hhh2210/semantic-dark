@@ -1,0 +1,116 @@
+{
+  "schema": "semantic-dark.m0-manifest.v1",
+  "baseline": {
+    "commit": "de53f773963af17c889054c690c4f79cf8fd7d12",
+    "recorded_at": "2026-07-18T22:58:45+08:00",
+    "verify": {
+      "command": "pnpm verify",
+      "exit_code": 0,
+      "status": "passed",
+      "test_files": 22,
+      "tests": 119,
+      "typecheck": "passed",
+      "build": "passed"
+    },
+    "e2e": {
+      "command": "pnpm e2e",
+      "exit_code": 0,
+      "status": "passed",
+      "chrome_version": "150.0.7871.129",
+      "metrics": {
+        "initial_svg_fill_stroke_contrast": 11.59,
+        "initial_dom_text_background_contrast": 11.72,
+        "initial_raster_wall_ms": 133.2,
+        "initial_raster_main_thread_ms": 1.0,
+        "reprocessed_raster_wall_ms": 125.7,
+        "reprocessed_raster_main_thread_ms": 0.7
+      },
+      "invariants": {
+        "native_dark_inactive": true,
+        "forced_restore_removed_owned_state": true,
+        "table_category_gradient_mapped": true,
+        "white_pseudo_side_bands_mapped": true,
+        "hover_first_frame_dark": true,
+        "console_messages": 0,
+        "page_errors": 0
+      }
+    }
+  },
+  "role_profiles": {
+    "source": "src/color/dark-map.ts",
+    "source_sha256": "671290dd0365d94efcc485ea137a7b0e433e784cbee20ea3dc2a437aa6dbb53d",
+    "canonical_sha256": "e6fd84a659b23272bfac8049abf7f5711b96abff793029340fdc942313fe6cb5",
+    "values": {
+      "background": {"minimumLightness": 0.08, "lightnessSpan": 0.14, "chromaScale": 0.7},
+      "surface": {"minimumLightness": 0.24, "lightnessSpan": 0.16, "chromaScale": 0.82},
+      "text": {"minimumLightness": 0.72, "lightnessSpan": 0.22, "chromaScale": 1},
+      "border": {"minimumLightness": 0.52, "lightnessSpan": 0.25, "chromaScale": 0.92},
+      "accent": {"minimumLightness": 0.58, "lightnessSpan": 0.24, "chromaScale": 1},
+      "svgFill": {"minimumLightness": 0.5, "lightnessSpan": 0.32, "chromaScale": 1},
+      "svgStroke": {"minimumLightness": 0.58, "lightnessSpan": 0.3, "chromaScale": 1}
+    }
+  },
+  "mechanism_fixtures": [
+    {
+      "id": "inkling-table-category-gradient",
+      "origin": "self-authored-reduction",
+      "purpose": "Reduce the light category-band and low-contrast label failure from the reported benchmark table.",
+      "files": [
+        {"path": "fixtures/integration/index.html", "sha256": "15f4e25d2825085d31a720e6b075ac0b7e1c634bb4fe579013004ca72b20d3bd"},
+        {"path": "fixtures/integration/fixture.css", "sha256": "b20a3444f61beaf0311975eb2ca3d76f61a947457fbff50141b75195ae0e7d1f"},
+        {"path": "src/testing/e2e/assertions.mjs", "sha256": "54533bd87cf8ecb20cd006ed85e01128a9e614ac727322c3369e6e7356a75230"}
+      ],
+      "assertions": [
+        "The authored category gradient contains a light stop before activation.",
+        "The extension installs its background-image variable and maps every solid stop to a dark surface.",
+        "Category text remains at or above 4.5:1 against the brightest mapped stop.",
+        "Disable restores the authored gradient exactly."
+      ]
+    },
+    {
+      "id": "inkling-table-white-pseudo-rails",
+      "origin": "self-authored-reduction",
+      "purpose": "Reduce the white vertical side-band failure to generated before/after surfaces around a table.",
+      "files": [
+        {"path": "fixtures/integration/index.html", "sha256": "15f4e25d2825085d31a720e6b075ac0b7e1c634bb4fe579013004ca72b20d3bd"},
+        {"path": "fixtures/integration/fixture.css", "sha256": "b20a3444f61beaf0311975eb2ca3d76f61a947457fbff50141b75195ae0e7d1f"},
+        {"path": "src/testing/e2e/dom-effects.mjs", "sha256": "a7b81eab8e039223d9e742b3256e9af04a8fada7b29564a654931a8bb634c98f"}
+      ],
+      "assertions": [
+        "Both generated rails are authored light before activation.",
+        "Both rails receive extension-owned pseudo-surface markers and render dark after activation.",
+        "Disable removes the markers and restores both authored rails."
+      ]
+    }
+  ],
+  "harm_contract": {
+    "frozen_before_m1": true,
+    "hard_failures": [
+      {"id": "text-contrast", "condition": "Any supported normal text renders below 4.5:1 against its effective backdrop.", "measurement": "WCAG relative-luminance contrast after alpha compositing."},
+      {"id": "non-text-contrast", "condition": "Any required non-text or focus paint renders below 3:1 against its effective backdrop.", "measurement": "WCAG relative-luminance contrast after alpha compositing."},
+      {"id": "surface-separation", "condition": "A mapped surface falls below 1.12:1 separation from its configured canvas or reverses a frozen authored surface order.", "measurement": "Pairwise contrast and OKLab lightness ordering."},
+      {"id": "native-dark", "condition": "Automatic mode mutates a coherent native-dark or forced-colors page.", "measurement": "Extension-owned root/paint markers and before/after computed-style journal."},
+      {"id": "restore", "condition": "Disable or authored-theme restoration leaves any supported extension-owned mutation or changed resource URL.", "measurement": "Owned-attribute, CSS-variable, SVG journal, image URL, and computed-style equality checks."}
+    ],
+    "severity_levels": [
+      {"level": "H3", "definition": "Primary content/control disappears or becomes unusable, status/chart meaning changes, or protected media/QR/CAPTCHA is destructively recolored.", "gate": "Any candidate-caused new or worsened H3 is a veto."},
+      {"level": "H2", "definition": "The main task remains possible, but table hierarchy, required interaction state, diagram tracking, or a large bright region is bad enough that the extension must be disabled.", "gate": "Any candidate-caused new or worsened H2 in the frozen sentinel is a veto."},
+      {"level": "H1", "definition": "Local aesthetic, hue, or chroma regression without loss of meaning, readability, or interaction.", "gate": "Report separately; it cannot remove a hard failure or severe finding."},
+      {"level": "H0", "definition": "Equivalent to or better than the pinned baseline.", "gate": "Pass."}
+    ]
+  },
+  "real_page_pilot": [
+    {"id": "native-github", "url": "https://github.com/", "category": "native-dark", "theme_expectation": "Authored dark theme remains untouched when system preference is dark.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["default", "focus-visible"], "primary_task": "Read navigation and repository cards without extension-owned paint markers.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "native-mdn", "url": "https://developer.mozilla.org/en-US/", "category": "native-dark", "theme_expectation": "Authored dark appearance remains untouched.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["default", "theme-dark"], "primary_task": "Read article navigation and code surfaces.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "native-huggingface", "url": "https://huggingface.co/", "category": "native-dark", "theme_expectation": "Authored dark appearance remains untouched.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["default", "theme-dark"], "primary_task": "Read model cards and navigation.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "native-carbon", "url": "https://carbondesignsystem.com/elements/themes/overview/", "category": "native-dark", "theme_expectation": "Dark theme examples remain untouched; page chrome remains coherent.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["default", "theme-example"], "primary_task": "Compare theme swatches without extension interference.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "light-pluralis", "url": "https://pluralis.ai/", "category": "light-only", "theme_expectation": "Light article/table surfaces are converted without white category bands or rails.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["article", "table", "hover-row"], "primary_task": "Read long-form copy and benchmark tables.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "light-arxiv", "url": "https://arxiv.org/", "category": "light-only", "theme_expectation": "Dense text and form controls retain hierarchy and contrast.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["default", "focus-search"], "primary_task": "Search and read an abstract page.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "light-hackernews", "url": "https://news.ycombinator.com/", "category": "light-only", "theme_expectation": "Dense links, metadata, and visited states remain distinguishable.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["default", "visited-link"], "primary_task": "Scan story titles and metadata.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "light-w3c", "url": "https://www.w3.org/TR/WCAG22/", "category": "light-only", "theme_expectation": "Technical prose, callouts, and anchors meet contrast floors.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["default", "target-anchor"], "primary_task": "Read guideline text and callouts.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "mixed-primer", "url": "https://primer.style/", "category": "dynamic-mixed", "theme_expectation": "Theme-aware components are not double-darkened during theme changes.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["light", "dark", "focus-visible"], "primary_task": "Inspect cards, controls, and theme transition.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "mixed-spectrum", "url": "https://spectrum.adobe.com/page/using-color/", "category": "dynamic-mixed", "theme_expectation": "Color examples and authored dark regions preserve semantic relationships.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["default", "dark-example"], "primary_task": "Compare color tokens and component examples.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "mixed-observable", "url": "https://observablehq.com/plot/", "category": "dynamic-mixed", "theme_expectation": "Charts, code, and page surfaces route separately without semantic color loss.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["default", "chart-hover"], "primary_task": "Read a chart and trace its legend.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"},
+    {"id": "mixed-openai", "url": "https://openai.com/", "category": "dynamic-mixed", "theme_expectation": "Media remains protected while surrounding authored surfaces remain coherent.", "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1}, "states": ["default", "menu-open"], "primary_task": "Read navigation and a content card without media inversion.", "capture_policy": "manual-public-no-auth-no-crawl", "status": "frozen-not-captured"}
+  ]
+}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import {contrastRatio, parseRgb, relativeLuminance} from './colors.mjs';
+import {colorsNear, contrastRatio, parseRgb, relativeLuminance} from './colors.mjs';
 
 const BEFORE_ATTRIBUTE = 'data-semantic-dark-before-background';
 const AFTER_ATTRIBUTE = 'data-semantic-dark-after-background';
@@ -21,6 +21,9 @@ export async function readDomEffectState(page) {
       afterProcessed: scroll.hasAttribute(afterAttribute),
       beforeBackground: getComputedStyle(scroll, '::before').backgroundColor,
       afterBackground: getComputedStyle(scroll, '::after').backgroundColor,
+      beforeVariable: scroll.style.getPropertyValue('--semantic-dark-before-background'),
+      afterVariable: scroll.style.getPropertyValue('--semantic-dark-after-background'),
+      containerBackground: getComputedStyle(scroll.closest('.benchmark-card')).backgroundColor,
       rowBackground: getComputedStyle(row).backgroundColor,
       explicitPseudoProcessed: explicit.hasAttribute(beforeColorAttribute),
       explicitPseudoColor: getComputedStyle(explicit, '::before').color,
@@ -40,10 +43,12 @@ export async function readDomEffectState(page) {
 export function verifyBaselineDomEffects(state, label = 'Baseline') {
   assert.equal(state.beforeProcessed, false, `${label} ::before was already processed`);
   assert.equal(state.afterProcessed, false, `${label} ::after was already processed`);
-  assert.ok(relativeLuminance(parseRgb(state.beforeBackground)) > 0.8,
-    `${label} ::before is not the authored light surface: ${state.beforeBackground}`);
-  assert.ok(relativeLuminance(parseRgb(state.afterBackground)) > 0.8,
-    `${label} ::after is not the authored light surface: ${state.afterBackground}`);
+  assert.equal(state.beforeVariable, '', `${label} ::before retained a mapped variable`);
+  assert.equal(state.afterVariable, '', `${label} ::after retained a mapped variable`);
+  assert.ok(colorsNear(parseRgb(state.beforeBackground), [255, 255, 255]),
+    `${label} ::before is not the authored white surface: ${state.beforeBackground}`);
+  assert.ok(colorsNear(parseRgb(state.afterBackground), [255, 255, 255]),
+    `${label} ::after is not the authored white surface: ${state.afterBackground}`);
   assert.equal(state.explicitPseudoProcessed, false,
     `${label} explicit pseudo color was already processed`);
   assert.equal(state.inheritedPseudoProcessed, false,
@@ -53,10 +58,16 @@ export function verifyBaselineDomEffects(state, label = 'Baseline') {
 export function verifyTransformedDomEffects(state) {
   assert.equal(state.beforeProcessed, true, 'Generated ::before surface was not mapped');
   assert.equal(state.afterProcessed, true, 'Generated ::after surface was not mapped');
+  assert.notEqual(state.beforeVariable, '', 'Generated ::before variable was not installed');
+  assert.notEqual(state.afterVariable, '', 'Generated ::after variable was not installed');
   assert.ok(relativeLuminance(parseRgb(state.beforeBackground)) < 0.2,
     `Generated ::before remained too light: ${state.beforeBackground}`);
   assert.ok(relativeLuminance(parseRgb(state.afterBackground)) < 0.2,
     `Generated ::after remained too light: ${state.afterBackground}`);
+  assert.ok(colorsNear(parseRgb(state.beforeBackground), parseRgb(state.afterBackground)),
+    'Generated side rails no longer share one continuous surface');
+  assert.ok(colorsNear(parseRgb(state.beforeBackground), parseRgb(state.containerBackground)),
+    'Generated side rails no longer match the mapped table-card surface');
   assert.equal(state.explicitPseudoProcessed, true,
     'Explicit generated text color was not mapped');
   assert.ok(contrastRatio(
