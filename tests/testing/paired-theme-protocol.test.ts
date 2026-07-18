@@ -1,9 +1,10 @@
 import {describe, expect, it} from 'vitest';
 import {validateProtocol, validateSceneManifest} from '../../src/testing/paired-theme/protocol';
+import type {SceneDefinition} from '../../src/testing/paired-theme/types';
 
 const limits = {maxScenes: 24, maxReviewedDecisions: 50};
 
-function scene(overrides: Record<string, unknown> = {}) {
+function scene(overrides: Partial<SceneDefinition> = {}): SceneDefinition {
   return {
     id: 'scene',
     kind: 'surface-stack',
@@ -34,6 +35,11 @@ describe('paired-theme protocol validation', () => {
         deltaEOkCap: 0.1,
         contrastLog2Cap: 1,
         rankTieEpsilon: 0.01,
+        comparisonEpsilon: 1e-7,
+        accentChromaThreshold: 0.02,
+        textContrastFloor: 4.5,
+        nonTextContrastFloor: 3,
+        surfaceSeparationFloor: 1.12,
         componentWeights: {color: 1 / 3, contrast: 1 / 3, rank: 1 / 3},
       },
     });
@@ -49,7 +55,18 @@ describe('paired-theme protocol validation', () => {
       viewport: {width: 1280, height: 900, deviceScaleFactor: 1},
       locale: 'en-US',
       colorProfile: 'srgb',
-      metric: {componentWeights: {color: 1 / 3, contrast: 1 / 3, rank: 1 / 3}},
+      metric: {
+        status: 'development-draft',
+        deltaEOkCap: 0.1,
+        contrastLog2Cap: 1,
+        rankTieEpsilon: 0.01,
+        comparisonEpsilon: 1e-7,
+        accentChromaThreshold: 0.02,
+        textContrastFloor: 4.5,
+        nonTextContrastFloor: 3,
+        surfaceSeparationFloor: 1.12,
+        componentWeights: {color: 1 / 3, contrast: 1 / 3, rank: 1 / 3},
+      },
     };
     expect(() => validateProtocol({...base, split: 'held-out', limits})).toThrow(
       'development protocols only',
@@ -75,5 +92,36 @@ describe('paired-theme protocol validation', () => {
     expect(() => validateSceneManifest({
       schema: 'semantic-dark.paired-theme-scenes.v1', scenes: [scene()],
     }, {maxScenes: 24, maxReviewedDecisions: 1})).toThrow('Reviewed decision count');
+  });
+
+  it('rejects duplicate surface-pair identities within or across scenes', () => {
+    const paired = scene({
+      surfacePairs: [{id: 'surface-order', lowerPaintId: 'canvas', upperPaintId: 'text'}],
+    });
+    expect(() => validateSceneManifest({
+      schema: 'semantic-dark.paired-theme-scenes.v1',
+      scenes: [{
+        ...paired,
+        surfacePairs: [...paired.surfacePairs, {...paired.surfacePairs[0]}],
+      }],
+    }, limits)).toThrow('Duplicate surface pair id');
+
+    const second = scene({
+      id: 'scene-2',
+      paints: paired.paints.map((paint) => ({
+        ...paint,
+        id: `${paint.id}-2`,
+        backdropPaintId: paint.backdropPaintId === null ? null : `${paint.backdropPaintId}-2`,
+      })),
+      surfacePairs: [{
+        id: 'surface-order',
+        lowerPaintId: 'canvas-2',
+        upperPaintId: 'text-2',
+      }],
+    });
+    expect(() => validateSceneManifest({
+      schema: 'semantic-dark.paired-theme-scenes.v1',
+      scenes: [paired, second],
+    }, limits)).toThrow('Duplicate surface pair id');
   });
 });

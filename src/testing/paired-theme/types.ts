@@ -51,6 +51,11 @@ export interface PairedThemeMetricConfig {
   deltaEOkCap: number;
   contrastLog2Cap: number;
   rankTieEpsilon: number;
+  comparisonEpsilon: number;
+  accentChromaThreshold: number;
+  textContrastFloor: number;
+  nonTextContrastFloor: number;
+  surfaceSeparationFloor: number;
   componentWeights: {
     color: number;
     contrast: number;

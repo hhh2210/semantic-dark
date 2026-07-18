@@ -30,6 +30,11 @@
     "deltaEOkCap": 0.1,
     "contrastLog2Cap": 1,
     "rankTieEpsilon": 0.01,
+    "comparisonEpsilon": 1e-7,
+    "accentChromaThreshold": 0.02,
+    "textContrastFloor": 4.5,
+    "nonTextContrastFloor": 3,
+    "surfaceSeparationFloor": 1.12,
     "componentWeights": {"color": 0.3333333333333333, "contrast": 0.3333333333333333, "rank": 0.3333333333333334}
   }
 }

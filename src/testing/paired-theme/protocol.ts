@@ -44,6 +44,23 @@ export function validateProtocol(value: unknown): PairedThemeProtocol {
   const weightSum = number(weights.color, 'color weight') +
     number(weights.contrast, 'contrast weight') + number(weights.rank, 'rank weight');
   if (Math.abs(weightSum - 1) > 1e-12) throw new Error('Metric component weights must sum to one');
+  if (metric.status !== 'development-draft' && metric.status !== 'frozen-v1') {
+    throw new Error('Metric status must be development-draft or frozen-v1');
+  }
+  for (const [name, value] of [
+    ['deltaEOkCap', metric.deltaEOkCap],
+    ['contrastLog2Cap', metric.contrastLog2Cap],
+    ['rankTieEpsilon', metric.rankTieEpsilon],
+    ['comparisonEpsilon', metric.comparisonEpsilon],
+    ['textContrastFloor', metric.textContrastFloor],
+    ['nonTextContrastFloor', metric.nonTextContrastFloor],
+    ['surfaceSeparationFloor', metric.surfaceSeparationFloor],
+  ] as const) {
+    if (number(value, name) <= 0) throw new Error(`${name} must be positive`);
+  }
+  if (number(metric.accentChromaThreshold, 'accentChromaThreshold') < 0) {
+    throw new Error('accentChromaThreshold must be nonnegative');
+  }
   const protocol = input as unknown as PairedThemeProtocol;
   if (!protocol.id || !protocol.sceneManifest || protocol.colorProfile !== 'srgb') {
     throw new Error('Protocol id, scene manifest, and sRGB profile are required');
@@ -74,6 +91,7 @@ export function validateSceneManifest(
   const scenes = input.scenes.map((scene, index) => validateScene(scene, index));
   const sceneIds = new Set<string>();
   const paintIds = new Set<string>();
+  const pairIds = new Set<string>();
   let reviewed = 0;
   for (const scene of scenes) {
     if (sceneIds.has(scene.id)) throw new Error(`Duplicate scene id: ${scene.id}`);
@@ -82,6 +100,10 @@ export function validateSceneManifest(
       if (paintIds.has(paint.id)) throw new Error(`Duplicate paint id: ${paint.id}`);
       paintIds.add(paint.id);
       if (paint.reviewed) reviewed += 1;
+    }
+    for (const pair of scene.surfacePairs) {
+      if (pairIds.has(pair.id)) throw new Error(`Duplicate surface pair id: ${pair.id}`);
+      pairIds.add(pair.id);
     }
     validateBackdropDag(scene);
   }
@@ -101,13 +123,17 @@ function validateScene(value: unknown, index: number): SceneDefinition {
   const sceneId = input.id;
   const paints = input.paints.map((paint, paintIndex) => validatePaint(paint, sceneId, paintIndex));
   const localIds = new Set(paints.map((paint) => paint.id));
+  const localPairIds = new Set<string>();
   for (const pairValue of input.surfacePairs) {
     const pair = object(pairValue, `${input.id}.surfacePair`);
-    if (typeof pair.id !== 'string' || typeof pair.lowerPaintId !== 'string' ||
+    if (typeof pair.id !== 'string' || pair.id.length === 0 ||
+        typeof pair.lowerPaintId !== 'string' ||
         typeof pair.upperPaintId !== 'string' || !localIds.has(pair.lowerPaintId) ||
         !localIds.has(pair.upperPaintId) || pair.lowerPaintId === pair.upperPaintId) {
       throw new Error(`Invalid surface pair in scene ${input.id}`);
     }
+    if (localPairIds.has(pair.id)) throw new Error(`Duplicate surface pair id: ${pair.id}`);
+    localPairIds.add(pair.id);
   }
   return input as unknown as SceneDefinition;
 }
