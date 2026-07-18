@@ -1,0 +1,56 @@
+{
+  "schema": "semantic-dark.paired-theme-scenes.v1",
+  "scenes": [
+    {
+      "id": "surface-stack",
+      "kind": "surface-stack",
+      "title": "Canvas, card, and elevated surface",
+      "paints": [
+        {"id": "surface.canvas", "component": "page", "state": "default", "property": "background-color", "pseudo": null, "role": "background", "token": "canvas", "backdropPaintId": null, "contrastKind": "none", "reviewed": true},
+        {"id": "surface.card", "component": "card", "state": "default", "property": "background-color", "pseudo": null, "role": "surface", "token": "surface", "backdropPaintId": "surface.canvas", "contrastKind": "none", "reviewed": false},
+        {"id": "surface.raised", "component": "card", "state": "elevated", "property": "background-color", "pseudo": null, "role": "surface", "token": "surfaceRaised", "backdropPaintId": "surface.card", "contrastKind": "none", "reviewed": true},
+        {"id": "surface.title", "component": "card-title", "state": "default", "property": "color", "pseudo": null, "role": "text", "token": "textPrimary", "backdropPaintId": "surface.raised", "contrastKind": "text", "reviewed": true}
+      ],
+      "surfacePairs": [
+        {"id": "surface.card-to-raised", "lowerPaintId": "surface.card", "upperPaintId": "surface.raised"}
+      ]
+    },
+    {
+      "id": "table-selection",
+      "kind": "table-selection",
+      "title": "Table category and selected row",
+      "paints": [
+        {"id": "table.canvas", "component": "table", "state": "default", "property": "background-color", "pseudo": null, "role": "background", "token": "canvas", "backdropPaintId": null, "contrastKind": "none", "reviewed": false},
+        {"id": "table.header", "component": "table-header", "state": "default", "property": "background-color", "pseudo": null, "role": "surface", "token": "tableHeader", "backdropPaintId": "table.canvas", "contrastKind": "none", "reviewed": true},
+        {"id": "table.selected", "component": "table-row", "state": "selected", "property": "background-color", "pseudo": null, "role": "accent", "token": "selectedSurface", "backdropPaintId": "table.canvas", "contrastKind": "non-text", "reviewed": true},
+        {"id": "table.text", "component": "table-header", "state": "default", "property": "color", "pseudo": null, "role": "text", "token": "textPrimary", "backdropPaintId": "table.header", "contrastKind": "text", "reviewed": true}
+      ],
+      "surfacePairs": [
+        {"id": "table.canvas-to-header", "lowerPaintId": "table.canvas", "upperPaintId": "table.header"}
+      ]
+    },
+    {
+      "id": "form-focus",
+      "kind": "form-focus",
+      "title": "Input border and keyboard focus",
+      "paints": [
+        {"id": "form.canvas", "component": "form", "state": "default", "property": "background-color", "pseudo": null, "role": "background", "token": "canvas", "backdropPaintId": null, "contrastKind": "none", "reviewed": false},
+        {"id": "form.surface", "component": "input", "state": "default", "property": "background-color", "pseudo": null, "role": "surface", "token": "surface", "backdropPaintId": "form.canvas", "contrastKind": "none", "reviewed": false},
+        {"id": "form.border", "component": "input", "state": "default", "property": "border-color", "pseudo": null, "role": "border", "token": "border", "backdropPaintId": "form.surface", "contrastKind": "non-text", "reviewed": true},
+        {"id": "form.focus", "component": "input", "state": "focus-visible", "property": "outline-color", "pseudo": "::after", "role": "accent", "token": "focus", "backdropPaintId": "form.surface", "contrastKind": "non-text", "reviewed": true}
+      ],
+      "surfacePairs": []
+    },
+    {
+      "id": "status-alert",
+      "kind": "status-alert",
+      "title": "Danger alert surface and text",
+      "paints": [
+        {"id": "status.canvas", "component": "alert-region", "state": "default", "property": "background-color", "pseudo": null, "role": "background", "token": "canvas", "backdropPaintId": null, "contrastKind": "none", "reviewed": false},
+        {"id": "status.surface", "component": "alert", "state": "danger", "property": "background-color", "pseudo": null, "role": "accent", "token": "dangerSurface", "backdropPaintId": "status.canvas", "contrastKind": "non-text", "reviewed": true},
+        {"id": "status.text", "component": "alert-text", "state": "danger", "property": "color", "pseudo": null, "role": "text", "token": "dangerText", "backdropPaintId": "status.surface", "contrastKind": "text", "reviewed": true}
+      ],
+      "surfacePairs": []
+    }
+  ]
+}

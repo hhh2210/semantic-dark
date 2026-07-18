@@ -23,6 +23,7 @@
     "verify": "pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
+    "@material/material-color-utilities": "0.4.0",
     "@types/chrome": "0.2.2",
     "@types/node": "26.1.1",
     "@types/pngjs": "6.0.5",

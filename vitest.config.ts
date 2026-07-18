@@ -5,5 +5,6 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['tests/**/*.test.ts'],
     coverage: {reporter: ['text', 'html']},
+    server: {deps: {inline: ['@material/material-color-utilities']}},
   },
 });

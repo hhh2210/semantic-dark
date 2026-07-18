@@ -1,0 +1,35 @@
+{
+  "schema": "semantic-dark.paired-theme-protocol.v1",
+  "id": "material-tonal-spot-2021-v1",
+  "split": "development",
+  "source": {
+    "system": "material",
+    "kind": "generated-scheme",
+    "package": {
+      "name": "@material/material-color-utilities",
+      "version": "0.4.0",
+      "integrity": "sha512-dlq6VExJReb8dhjj3a/yTigr3ncNwoFmL5Iy2ENtbDX03EmNeOEdZ+vsaGrj7RTuO+mB7L58II4LCsl4NpM8uw==",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/material-foundation/material-color-utilities"
+    },
+    "generator": {
+      "seed": "#6750A4",
+      "variant": "tonal-spot",
+      "specVersion": "2021",
+      "platform": "phone",
+      "contrastLevel": 0
+    }
+  },
+  "sceneManifest": "fixtures/paired-theme/common-scenes.v1.json",
+  "viewport": {"width": 1280, "height": 900, "deviceScaleFactor": 1},
+  "locale": "en-US",
+  "colorProfile": "srgb",
+  "limits": {"maxScenes": 24, "maxReviewedDecisions": 50},
+  "metric": {
+    "status": "development-draft",
+    "deltaEOkCap": 0.1,
+    "contrastLog2Cap": 1,
+    "rankTieEpsilon": 0.01,
+    "componentWeights": {"color": 0.3333333333333333, "contrast": 0.3333333333333333, "rank": 0.3333333333333334}
+  }
+}
