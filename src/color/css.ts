@@ -1,4 +1,5 @@
 import {gamutMapOklch, oklabToOklch} from './oklab';
+import {quantizeSrgb8} from './srgb';
 import {clamp01, normalizeHueDegrees, srgb, type SrgbColor} from './types';
 
 const NAMED_COLORS: Readonly<Record<string, readonly [number, number, number]>> = {
@@ -47,12 +48,24 @@ export function parseCssColor(value: string): SrgbColor | null {
   return null;
 }
 
-/** Serialize without 8-bit quantization, so a solved contrast threshold survives CSS output. */
+/** Serialize without 8-bit quantization for source normalization and round trips. */
 export function formatCssColor(color: SrgbColor): string {
   const red = trimNumber(clamp01(color.r) * 255, 5);
   const green = trimNumber(clamp01(color.g) * 255, 5);
   const blue = trimNumber(clamp01(color.b) * 255, 5);
   const alpha = clamp01(color.a);
+  return alpha >= 1 - 1e-8
+    ? `rgb(${red} ${green} ${blue})`
+    : `rgb(${red} ${green} ${blue} / ${trimNumber(alpha, 6)})`;
+}
+
+/** Serialize mapped output on Chrome's RGBA8 paint grid. */
+export function formatRgba8CssColor(color: SrgbColor): string {
+  const quantized = quantizeSrgb8(color);
+  const red = Math.round(quantized.r * 255);
+  const green = Math.round(quantized.g * 255);
+  const blue = Math.round(quantized.b * 255);
+  const alpha = quantized.a;
   return alpha >= 1 - 1e-8
     ? `rgb(${red} ${green} ${blue})`
     : `rgb(${red} ${green} ${blue} / ${trimNumber(alpha, 6)})`;

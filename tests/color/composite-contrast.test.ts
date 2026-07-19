@@ -6,8 +6,11 @@ import {
   contrastRatio,
   ensureContrast,
   ensureContrastWithReport,
+  ensureRgba8ContrastWithReport,
   hueDistanceDegrees,
+  quantizeSrgb8,
   relativeLuminance,
+  rgba8ContrastRatios,
   srgb,
   srgbToOklch,
 } from '../../src/color/index';
@@ -95,5 +98,63 @@ describe('WCAG contrast constraints', () => {
     );
     expect(report.attainable).toBe(false);
     expect(report.color.a).toBeCloseTo(0.01, 12);
+  });
+
+  it('models Chrome nearest-code RGBA8 quantization idempotently', () => {
+    const quantized = quantizeSrgb8(srgb(31.49 / 255, 31.5 / 255, 31.51 / 255, 0.1249));
+    expect(quantized).toEqual(srgb(31 / 255, 32 / 255, 32 / 255, 32 / 255));
+    expect(quantizeSrgb8(srgb(0, 0, 0, 0.1234567)).a).toBe(31 / 255);
+    expect(quantizeSrgb8(srgb(-1, 2, 0.5, 4))).toEqual(srgb(0, 1, 128 / 255, 1));
+    expect(quantizeSrgb8(quantized)).toEqual(quantized);
+  });
+
+  it('repairs the measured Spectrum surface separation on the rendered grid', () => {
+    const card = srgb(32 / 255, 32 / 255, 32 / 255);
+    const oldRaised = srgb(41 / 255, 41 / 255, 41 / 255);
+    expect(contrastRatio(oldRaised, card)).toBeCloseTo(1.1199500334856427, 14);
+
+    const continuousRaised = srgb(
+      0.1609007013093135,
+      0.1609006710307492,
+      0.16090058907227472,
+    );
+    const report = ensureRgba8ContrastWithReport(
+      continuousRaised,
+      card,
+      1.12,
+      {direction: 'lighter'},
+    );
+    const ratios = rgba8ContrastRatios(report.color, card);
+    expect(report.attainable).toBe(true);
+    expect(report.color).toEqual(srgb(42 / 255, 41 / 255, 41 / 255));
+    expect(ratios.analytic).toBeGreaterThanOrEqual(1.12);
+    expect(ratios.rendered).toBeGreaterThanOrEqual(1.12);
+    expect(ratios.rendered).toBeCloseTo(1.123181338925729, 14);
+  });
+
+  it('rejects an alpha case that declared-color analysis alone would false-pass', () => {
+    const foreground = srgb(160 / 255, 143 / 255, 107 / 255, 48 / 255);
+    const background = srgb(47 / 255, 110 / 255, 82 / 255);
+    const ratios = rgba8ContrastRatios(foreground, background);
+    expect(ratios.analytic).toBeCloseTo(1.1207161884704588, 14);
+    expect(ratios.rendered).toBeCloseTo(1.1176161663976178, 14);
+    expect(ratios.analytic).toBeGreaterThanOrEqual(1.12);
+    expect(ratios.minimum).toBeLessThan(1.12);
+  });
+
+  it('never reports an attainable RGBA8 solution below the exact rendered floor', () => {
+    const next = random(0x8b17c0de);
+    for (const target of [1.12, 3, 4.5]) {
+      for (let sample = 0; sample < 350; sample += 1) {
+        const foreground = srgb(next(), next(), next(), next());
+        const background = srgb(next(), next(), next(), next());
+        const canvas = srgb(next(), next(), next());
+        const report = ensureRgba8ContrastWithReport(foreground, background, target, {canvas});
+        if (!report.attainable) continue;
+        const ratios = rgba8ContrastRatios(report.color, background, canvas);
+        expect(ratios.analytic).toBeGreaterThanOrEqual(target);
+        expect(ratios.rendered).toBeGreaterThanOrEqual(target);
+      }
+    }
   });
 });

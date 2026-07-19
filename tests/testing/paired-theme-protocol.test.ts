@@ -3,7 +3,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {
-  loadPairedThemeProtocol,
+  resolveSceneManifestPath,
   validateProtocol,
   validateSceneManifest,
 } from '../../src/testing/paired-theme/protocol';
@@ -132,10 +132,10 @@ describe('paired-theme protocol validation', () => {
   });
 
   it('resolves the scene manifest relative to the protocol and blocks path escape', async () => {
-    const loaded = await loadPairedThemeProtocol(
-      path.resolve('fixtures/paired-theme/material-v1.protocol.json'), process.cwd(),
+    const materialProtocolPath = path.resolve('fixtures/paired-theme/material-v1.protocol.json');
+    expect(resolveSceneManifestPath(materialProtocolPath, 'common-scenes.v1.json')).toBe(
+      path.resolve('fixtures/paired-theme/common-scenes.v1.json'),
     );
-    expect(loaded.sceneManifestPath).toBe(path.resolve('fixtures/paired-theme/common-scenes.v1.json'));
     const directory = await mkdtemp(path.join(tmpdir(), 'paired-theme-protocol-'));
     try {
       const protocolPath = path.join(directory, 'protocol.json');
@@ -147,7 +147,7 @@ describe('paired-theme protocol validation', () => {
         metricSpec,
       };
       await writeFile(protocolPath, JSON.stringify({...protocol, sceneManifest: '../escape.json'}));
-      await expect(loadPairedThemeProtocol(protocolPath)).rejects.toThrow(/stay inside/);
+      expect(() => resolveSceneManifestPath(protocolPath, '../escape.json')).toThrow(/stay inside/);
     } finally {
       await rm(directory, {recursive: true, force: true});
     }

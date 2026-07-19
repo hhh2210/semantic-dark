@@ -1,22 +1,22 @@
 import {
   WCAG_NON_TEXT_CONTRAST,
   WCAG_TEXT_CONTRAST,
-  contrastRatio,
   ensureContrastWithReport,
+  ensureRgba8ContrastWithReport,
+  rgba8ContrastRatios,
 } from './contrast';
-import {formatCssColor, parseCssColor} from './css';
+import {formatRgba8CssColor, parseCssColor} from './css';
 import {gamutMapOklch, srgbToOklch} from './oklab';
+import {
+  validateRoleProfiles,
+  type ColorRole,
+  type RoleProfile,
+  type RoleProfiles,
+} from './role-profiles';
 import {clipSrgb} from './srgb';
 import {clamp, srgb, type OklchColor, type SrgbColor} from './types';
 
-export type ColorRole =
-  | 'background'
-  | 'surface'
-  | 'text'
-  | 'border'
-  | 'accent'
-  | 'svgFill'
-  | 'svgStroke';
+export type {ColorRole} from './role-profiles';
 
 export type SvgColorRole =
   | 'text-fill'
@@ -60,14 +60,7 @@ export interface RoleMapResult {
 export const DEFAULT_DARK_BACKGROUND: Readonly<SrgbColor> = srgb(18 / 255, 18 / 255, 18 / 255);
 export const MINIMUM_SURFACE_SEPARATION = 1.12;
 const CONSTRAINT_HEADROOM = 0.001;
-
-interface RoleProfile {
-  minimumLightness: number;
-  lightnessSpan: number;
-  chromaScale: number;
-}
-
-const ROLE_PROFILES: Readonly<Record<ColorRole, RoleProfile>> = {
+const ROLE_PROFILES: RoleProfiles = validateRoleProfiles({
   background: {minimumLightness: 0.08, lightnessSpan: 0.14, chromaScale: 0.7},
   surface: {minimumLightness: 0.24, lightnessSpan: 0.16, chromaScale: 0.82},
   text: {minimumLightness: 0.72, lightnessSpan: 0.22, chromaScale: 1},
@@ -75,7 +68,7 @@ const ROLE_PROFILES: Readonly<Record<ColorRole, RoleProfile>> = {
   accent: {minimumLightness: 0.58, lightnessSpan: 0.24, chromaScale: 1},
   svgFill: {minimumLightness: 0.5, lightnessSpan: 0.32, chromaScale: 1},
   svgStroke: {minimumLightness: 0.58, lightnessSpan: 0.3, chromaScale: 1},
-};
+});
 
 /** Map a parsed sRGB color into the dark palette with role-specific constraints. */
 export function mapRoleColor(color: SrgbColor, options: RoleMapOptions): SrgbColor {
@@ -86,9 +79,30 @@ export function mapRoleColorWithReport(
   color: SrgbColor,
   options: RoleMapOptions,
 ): RoleMapResult {
+  return mapRoleColorUsingProfiles(color, options, ROLE_PROFILES);
+}
+
+/** Evaluation-only mapper. The complete profile set is required and validated before use. */
+export function mapRoleColorWithProfileSet(
+  color: SrgbColor,
+  options: RoleMapOptions,
+  profiles: RoleProfiles,
+): RoleMapResult {
+  return mapRoleColorUsingProfiles(
+    color,
+    options,
+    validateRoleProfiles(profiles, 'evaluation role profiles'),
+  );
+}
+
+function mapRoleColorUsingProfiles(
+  color: SrgbColor,
+  options: RoleMapOptions,
+  profiles: RoleProfiles,
+): RoleMapResult {
   const role = normalizeRole(options.role, options.property);
   const source = srgbToOklch(clipSrgb(color));
-  const profile = ROLE_PROFILES[role];
+  const profile = profiles[role];
   const mapped = gamutMapOklch(mapIntoRole(source, profile, options.preserveHue !== false));
   const against = clipSrgb(options.against ?? DEFAULT_DARK_BACKGROUND);
   const minimumContrast = requiredContrast(role, options);
@@ -98,25 +112,37 @@ export function mapRoleColorWithReport(
       color: mapped,
       role,
       minimumContrast,
-      achievedContrast: contrastRatio(mapped, against, options.canvas),
+      achievedContrast: rgba8ContrastRatios(mapped, against, options.canvas).minimum,
       adjustedForContrast: false,
     };
   }
 
-  const adjustment = ensureContrastWithReport(
+  const contrastOptions = {
+    direction: role === 'surface' ? 'lighter' as const : 'auto' as const,
+    ...(options.canvas === undefined ? {} : {canvas: options.canvas}),
+  };
+  const continuousAdjustment = ensureContrastWithReport(
     mapped,
     against,
     minimumContrast + CONSTRAINT_HEADROOM,
-    {
-      direction: role === 'surface' ? 'lighter' : 'auto',
-      ...(options.canvas === undefined ? {} : {canvas: options.canvas}),
-    },
+    contrastOptions,
   );
+  const adjustment = rgba8ContrastRatios(
+    continuousAdjustment.color,
+    against,
+    options.canvas,
+  ).minimum >= minimumContrast
+    ? continuousAdjustment
+    : ensureRgba8ContrastWithReport(mapped, against, minimumContrast, contrastOptions);
   return {
     color: adjustment.color,
     role,
     minimumContrast,
-    achievedContrast: contrastRatio(adjustment.color, against, options.canvas),
+    achievedContrast: rgba8ContrastRatios(
+      adjustment.color,
+      against,
+      options.canvas,
+    ).minimum,
     adjustedForContrast: adjustment.adjusted,
   };
 }
@@ -137,7 +163,7 @@ export function mapColor(input: string, options: MapColorOptions): string {
     ...(options.important === undefined ? {} : {important: options.important}),
     ...(options.property === undefined ? {} : {property: options.property}),
   });
-  return formatCssColor(mapped);
+  return formatRgba8CssColor(mapped);
 }
 
 function mapIntoRole(source: OklchColor, profile: RoleProfile, preserveHue: boolean): OklchColor {

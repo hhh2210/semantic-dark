@@ -29,11 +29,7 @@ export async function loadPairedThemeProtocol(
   const protocolPath = path.resolve(protocolValue);
   const protocol = validateProtocol(JSON.parse(await readFile(protocolPath, 'utf8')));
   const protocolDirectory = path.dirname(protocolPath);
-  const sceneManifestPath = path.resolve(protocolDirectory, protocol.sceneManifest);
-  if (sceneManifestPath === protocolDirectory ||
-      !sceneManifestPath.startsWith(`${protocolDirectory}${path.sep}`)) {
-    throw new Error('Scene manifest must stay inside the protocol directory');
-  }
+  const sceneManifestPath = resolveSceneManifestPath(protocolPath, protocol.sceneManifest);
   const scenes = validateSceneManifest(
     JSON.parse(await readFile(sceneManifestPath, 'utf8')),
     protocol.limits,
@@ -46,6 +42,16 @@ export async function loadPairedThemeProtocol(
   if (frozen.spec.id !== protocol.metricSpec.id) throw new Error('Metric spec id mismatch');
   return {protocol, scenes, protocolPath, sceneManifestPath, metricSpecPath,
     metricSpecSha256: frozen.sha256, metricSpec: frozen.spec, metric: frozen.config};
+}
+
+export function resolveSceneManifestPath(protocolPath: string, sceneManifest: string): string {
+  const protocolDirectory = path.dirname(path.resolve(protocolPath));
+  const sceneManifestPath = path.resolve(protocolDirectory, sceneManifest);
+  if (sceneManifestPath === protocolDirectory ||
+      !sceneManifestPath.startsWith(`${protocolDirectory}${path.sep}`)) {
+    throw new Error('Scene manifest must stay inside the protocol directory');
+  }
+  return sceneManifestPath;
 }
 
 export function validateProtocol(value: unknown): PairedThemeProtocol {

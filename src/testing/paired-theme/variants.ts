@@ -1,4 +1,10 @@
-import {mapCandidateTheme, type CandidatePaintMapping, type LightTokenMap} from './candidate';
+import {
+  mapCandidateTheme,
+  mapShippedCandidateTheme,
+  type CandidatePaintMapping,
+  type LightTokenMap,
+} from './candidate';
+import type {RoleProfiles} from '../../color/role-profiles';
 import type {
   NormalizedThemePair,
   ObservationVariant,
@@ -15,10 +21,36 @@ export function buildThemeVariantValues(
   theme: NormalizedThemePair,
   scenes: readonly SceneDefinition[],
 ): ThemeVariantValues {
-  const lightTokens = Object.fromEntries(
+  const lightTokens = themeLightTokens(theme);
+  return buildThemeVariantValuesFromMappings(
+    theme,
+    scenes,
+    mapShippedCandidateTheme(lightTokens, scenes),
+  );
+}
+
+/** V2-only profile-injected builder; the complete profile set is mandatory. */
+export function buildThemeVariantValuesWithProfiles(
+  theme: NormalizedThemePair,
+  scenes: readonly SceneDefinition[],
+  profiles: RoleProfiles,
+): ThemeVariantValues {
+  const lightTokens = themeLightTokens(theme);
+  const candidateMappings = mapCandidateTheme(lightTokens, scenes, profiles);
+  return buildThemeVariantValuesFromMappings(theme, scenes, candidateMappings);
+}
+
+function themeLightTokens(theme: NormalizedThemePair): LightTokenMap {
+  return Object.fromEntries(
     Object.entries(theme.tokens).map(([name, token]) => [name, token.light]),
   ) as LightTokenMap;
-  const candidateMappings = mapCandidateTheme(lightTokens, scenes);
+}
+
+function buildThemeVariantValuesFromMappings(
+  theme: NormalizedThemePair,
+  scenes: readonly SceneDefinition[],
+  candidateMappings: readonly CandidatePaintMapping[],
+): ThemeVariantValues {
   const candidateById = new Map(candidateMappings.map((mapping) => [mapping.paintId, mapping]));
   if (candidateById.size !== candidateMappings.length) throw new Error('Duplicate candidate paint id');
 

@@ -1,10 +1,14 @@
 import {describe, expect, it} from 'vitest';
+import baselineProfile from '../../fixtures/profiles/baseline-profile.v2.json';
+import {validateRoleProfiles} from '../../src/color/role-profiles';
 import {mapCandidateTheme} from '../../src/testing/paired-theme/candidate';
 import {parseHeldOutThemePair} from '../../src/testing/paired-theme/heldout-source';
 import {CARBON_TOKEN_SELECTORS, FLUENT_TOKEN_SELECTORS} from '../../src/testing/paired-theme/protocol-source';
 import {validateSceneManifest} from '../../src/testing/paired-theme/protocol';
 import type {CarbonProtocolSource, FluentProtocolSource, NormalizedTokenName} from '../../src/testing/paired-theme/types';
 import scenesJson from '../../fixtures/paired-theme/common-scenes.v1.json';
+
+const BASELINE_PROFILES = validateRoleProfiles(baselineProfile.profiles);
 
 const packagePin = (name: string, version: string, integrity: string, license: string,
   repository: string) => ({name, version, integrity, license, repository});
@@ -45,7 +49,9 @@ describe('preregistered held-out source adapter', () => {
     const light = (pair: typeof first) => Object.fromEntries(
       Object.entries(pair.tokens).map(([name, token]) => [name, token.light]),
     );
-    expect(mapCandidateTheme(light(poisoned), scenes)).toEqual(mapCandidateTheme(light(first), scenes));
+    expect(mapCandidateTheme(light(poisoned), scenes, BASELINE_PROFILES)).toEqual(
+      mapCandidateTheme(light(first), scenes, BASELINE_PROFILES),
+    );
   });
 
   it('fails closed on missing selectors, invalid colors, or contract drift', () => {

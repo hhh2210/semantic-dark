@@ -37,7 +37,7 @@ describe('held-out freeze boundary', () => {
       .rejects.toThrow(/not an ancestor/);
   });
 
-  it('blocks direct held-out scoring before package exports are resolved', async () => {
+  it('keeps historical v1 fail-closed after the pinned engine changes', async () => {
     const output = path.join(homedir(), 'scratch-data',
       `semantic-dark-heldout-guard-test-${process.pid}-${Date.now()}`);
     temporaryDirectories.push(output);
@@ -46,7 +46,7 @@ describe('held-out freeze boundary', () => {
       protocolPath: 'fixtures/paired-theme/carbon-v1.protocol.json',
       output,
       requireClean: false,
-    })).rejects.toThrow(/combined exposure claim/);
+    })).rejects.toThrow(/SHA-256 mismatch.*dark-map/);
   });
 });
 

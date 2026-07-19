@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://semantic-dark.local/schemas/role-profile.v2.json",
+  "title": "Semantic Dark role-profile artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema", "id", "kind", "profiles", "semanticSha256"],
+  "properties": {
+    "$schema": {"const": "./role-profile.schema.json"},
+    "schema": {"const": "semantic-dark.role-profile.v2"},
+    "id": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["baseline", "candidate"]},
+    "profiles": {"$ref": "#/$defs/profiles"},
+    "semanticSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimumLightness", "lightnessSpan", "chromaScale"],
+      "properties": {
+        "minimumLightness": {"type": "number", "minimum": 0, "maximum": 1},
+        "lightnessSpan": {"type": "number", "minimum": 0, "maximum": 1},
+        "chromaScale": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["background", "surface", "text", "border", "accent", "svgFill", "svgStroke"],
+      "properties": {
+        "background": {"$ref": "#/$defs/profile"},
+        "surface": {"$ref": "#/$defs/profile"},
+        "text": {"$ref": "#/$defs/profile"},
+        "border": {"$ref": "#/$defs/profile"},
+        "accent": {"$ref": "#/$defs/profile"},
+        "svgFill": {"$ref": "#/$defs/profile"},
+        "svgStroke": {"$ref": "#/$defs/profile"}
+      }
+    }
+  }
+}

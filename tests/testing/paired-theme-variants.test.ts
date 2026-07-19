@@ -1,7 +1,14 @@
 import {describe, expect, it} from 'vitest';
+import baselineProfile from '../../fixtures/profiles/baseline-profile.v2.json';
+import {validateRoleProfiles} from '../../src/color/role-profiles';
 
-import {buildThemeVariantValues} from '../../src/testing/paired-theme/variants';
+import {
+  buildThemeVariantValues,
+  buildThemeVariantValuesWithProfiles,
+} from '../../src/testing/paired-theme/variants';
 import type {NormalizedThemePair, SceneDefinition} from '../../src/testing/paired-theme/types';
+
+const BASELINE_PROFILES = validateRoleProfiles(baselineProfile.profiles);
 
 const scenes: SceneDefinition[] = [{
   id: 'scene', kind: 'surface-stack', title: 'Scene',
@@ -36,18 +43,24 @@ function theme(darkText: string): NormalizedThemePair {
 
 describe('paired-theme variant values', () => {
   it('keeps authored dark values out of baseline candidate generation', () => {
-    const first = buildThemeVariantValues(theme('#fff'), scenes);
-    const second = buildThemeVariantValues(theme('#f00'), scenes);
+    const first = buildThemeVariantValuesWithProfiles(theme('#fff'), scenes, BASELINE_PROFILES);
+    const second = buildThemeVariantValuesWithProfiles(theme('#f00'), scenes, BASELINE_PROFILES);
     expect(first.values['authored-dark'].text).not.toBe(second.values['authored-dark'].text);
     expect(first.values['baseline-candidate']).toEqual(second.values['baseline-candidate']);
     expect(first.values.light).toEqual(second.values.light);
   });
 
   it('emits exact, sorted paint identity sets for all variants', () => {
-    const result = buildThemeVariantValues(theme('#fff'), scenes);
+    const result = buildThemeVariantValuesWithProfiles(theme('#fff'), scenes, BASELINE_PROFILES);
     for (const values of Object.values(result.values)) {
       expect(Object.keys(values)).toEqual(['canvas', 'text']);
     }
     expect(result.candidateMappings.map((mapping) => mapping.paintId)).toEqual(['canvas', 'text']);
+  });
+
+  it('keeps the historical shipped-profile builder equal to the pinned baseline fixture', () => {
+    expect(buildThemeVariantValues(theme('#fff'), scenes)).toEqual(
+      buildThemeVariantValuesWithProfiles(theme('#fff'), scenes, BASELINE_PROFILES),
+    );
   });
 });

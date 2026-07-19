@@ -1,11 +1,18 @@
 import {
   DEFAULT_DARK_BACKGROUND,
   compositeSrgb,
-  formatCssColor,
-  mapRoleColorWithReport,
   parseCssColor,
   type SrgbColor,
 } from '../../color';
+import {formatRgba8CssColor} from '../../color/css';
+import {
+  mapRoleColorWithProfileSet,
+  mapRoleColorWithReport,
+  type RoleMapOptions,
+  type RoleMapResult,
+} from '../../color/dark-map';
+import {validateRoleProfiles, type RoleProfiles} from '../../color/role-profiles';
+import {quantizeSrgb8} from '../../color/srgb';
 import type {NormalizedTokenName, SceneDefinition} from './types';
 
 export type LightTokenMap = Readonly<Partial<Record<NormalizedTokenName, string>>>;
@@ -28,13 +35,38 @@ export interface CandidatePaintMapping {
   contrast: CandidateContrastReport;
 }
 
+type CandidateColorMapper = (color: SrgbColor, options: RoleMapOptions) => RoleMapResult;
+
 /**
- * Map only the light half of a normalized theme through the frozen production
- * engine. Authored dark tokens are deliberately absent from this API.
+ * Map only the light half of a normalized theme through the frozen solver and
+ * an explicit complete profile set. Authored dark tokens are deliberately
+ * absent from this API.
  */
 export function mapCandidateTheme(
   lightTokens: LightTokenMap,
   scenes: readonly SceneDefinition[],
+  profiles: RoleProfiles,
+): CandidatePaintMapping[] {
+  const validatedProfiles = validateRoleProfiles(profiles, 'candidate role profiles');
+  return mapCandidateThemeUsing(
+    lightTokens,
+    scenes,
+    (color, options) => mapRoleColorWithProfileSet(color, options, validatedProfiles),
+  );
+}
+
+/** Historical v1 baseline path; production profiles remain inaccessible to callers. */
+export function mapShippedCandidateTheme(
+  lightTokens: LightTokenMap,
+  scenes: readonly SceneDefinition[],
+): CandidatePaintMapping[] {
+  return mapCandidateThemeUsing(lightTokens, scenes, mapRoleColorWithReport);
+}
+
+function mapCandidateThemeUsing(
+  lightTokens: LightTokenMap,
+  scenes: readonly SceneDefinition[],
+  mapper: CandidateColorMapper,
 ): CandidatePaintMapping[] {
   const seenSceneIds = new Set<string>();
   const seenPaintIds = new Set<string>();
@@ -50,10 +82,14 @@ export function mapCandidateTheme(
 
   return [...scenes]
     .sort((left, right) => left.id.localeCompare(right.id))
-    .flatMap((scene) => mapScene(lightTokens, scene));
+    .flatMap((scene) => mapScene(lightTokens, scene, mapper));
 }
 
-function mapScene(lightTokens: LightTokenMap, scene: SceneDefinition): CandidatePaintMapping[] {
+function mapScene(
+  lightTokens: LightTokenMap,
+  scene: SceneDefinition,
+  mapper: CandidateColorMapper,
+): CandidatePaintMapping[] {
   const paints = new Map(scene.paints.map((paint) => [paint.id, paint]));
   for (const paint of scene.paints) {
     if (paint.backdropPaintId !== null && !paints.has(paint.backdropPaintId)) {
@@ -90,11 +126,12 @@ function mapScene(lightTokens: LightTokenMap, scene: SceneDefinition): Candidate
     }
 
     const against = backdrop?.effectiveColor ?? DEFAULT_DARK_BACKGROUND;
-    const mappedReport = mapRoleColorWithReport(sourceLightColor, {
+    const mappedReport = mapper(sourceLightColor, {
       role: paint.role,
       ...(backdrop === null ? {} : {against}),
     });
     const mappedColor = mappedReport.color;
+    const renderedMappedColor = quantizeSrgb8(mappedColor);
     const result: CandidatePaintMapping = {
       sceneId: scene.id,
       paintId: paint.id,
@@ -102,10 +139,10 @@ function mapScene(lightTokens: LightTokenMap, scene: SceneDefinition): Candidate
       backdropPaintId: paint.backdropPaintId,
       sourceLightColor,
       mappedColor,
-      mappedCss: formatCssColor(mappedColor),
+      mappedCss: formatRgba8CssColor(mappedColor),
       effectiveColor: backdrop === null
-        ? mappedColor
-        : compositeSrgb(mappedColor, backdrop.effectiveColor),
+        ? renderedMappedColor
+        : quantizeSrgb8(compositeSrgb(renderedMappedColor, backdrop.effectiveColor)),
       contrast: {
         minimum: mappedReport.minimumContrast,
         achieved: mappedReport.achievedContrast,

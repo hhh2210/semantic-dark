@@ -1,7 +1,8 @@
 import {compositeSrgb} from './composite';
 import {relativeLuminance} from './contrast';
-import {formatCssColor, parseCssColor} from './css';
+import {formatRgba8CssColor, parseCssColor} from './css';
 import {mapRoleColor} from './dark-map';
+import {quantizeSrgb8} from './srgb';
 import type {SrgbColor} from './types';
 
 const COLOR_FUNCTIONS = new Set([
@@ -43,10 +44,13 @@ export function mapCssGradient(
       preserveHue: true,
       minContrast: 1,
     });
-    const flattened = compositeSrgb(mapped, {...canvas, a: 1});
+    const flattened = quantizeSrgb8(compositeSrgb(
+      quantizeSrgb8(mapped),
+      {...quantizeSrgb8(canvas), a: 1},
+    ));
     if (relativeLuminance(flattened) > relativeLuminance(brightest)) brightest = flattened;
     mappedStops += 1;
-    return formatCssColor(mapped);
+    return formatRgba8CssColor(mapped);
   };
 
   while (index < input.length) {
@@ -103,7 +107,7 @@ export function mapCssGradient(
 
   return mappedStops === 0
     ? null
-    : {css: output, readabilityBackground: formatCssColor(brightest)};
+    : {css: output, readabilityBackground: formatRgba8CssColor(brightest)};
 }
 
 function readHexColor(input: string, start: number): string | null {

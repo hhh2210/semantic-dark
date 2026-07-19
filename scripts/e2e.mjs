@@ -17,6 +17,7 @@ import {
 } from '../src/testing/e2e/assertions.mjs';
 import {contrastRatio, parseRgb} from '../src/testing/e2e/colors.mjs';
 import {exerciseInteractiveDomEffects} from '../src/testing/e2e/dom-effects.mjs';
+import {verifyRgba8Quantization} from '../src/testing/e2e/rgba8-quantization.mjs';
 import {
   captureBaseline,
   inspectCurrentPopup,
@@ -51,6 +52,7 @@ const CONFIG = {
 
 async function main() {
   await assertE2eInputs(CONFIG);
+  await verifyRgba8Quantization(CONFIG);
   await mkdir(CONFIG.artifactDir, {recursive: true});
   const beforePath = path.join(CONFIG.artifactDir, 'e2e-before.png');
   const afterPath = path.join(CONFIG.artifactDir, 'e2e-after.png');

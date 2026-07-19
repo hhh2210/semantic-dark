@@ -1,6 +1,12 @@
 import {describe, expect, it} from 'vitest';
 
-import {formatCssColor, parseCssColor, srgb} from '../../src/color/index';
+import {
+  formatCssColor,
+  formatRgba8CssColor,
+  parseCssColor,
+  quantizeSrgb8,
+  srgb,
+} from '../../src/color/index';
 
 describe('CSS solid-color parsing', () => {
   it.each([
@@ -29,7 +35,7 @@ describe('CSS solid-color parsing', () => {
     expect(parseCssColor('rgb(calc(1) 2 3)')).toBeNull();
   });
 
-  it('round-trips serializer output without 8-bit quantization', () => {
+  it('round-trips source colors without forcing them onto the output grid', () => {
     const source = srgb(0.1234567, 0.7654321, 0.3333333, 0.456789);
     const css = formatCssColor(source);
     const parsed = parseCssColor(css)!;
@@ -37,5 +43,17 @@ describe('CSS solid-color parsing', () => {
     expect(parsed.g).toBeCloseTo(source.g, 6);
     expect(parsed.b).toBeCloseTo(source.b, 6);
     expect(parsed.a).toBeCloseTo(source.a, 6);
+  });
+
+  it('serializes mapped output on Chrome\'s RGBA8 paint grid', () => {
+    const source = srgb(0.1234567, 0.7654321, 0.3333333, 0.456789);
+    const css = formatRgba8CssColor(source);
+    const parsed = parseCssColor(css)!;
+    const quantized = quantizeSrgb8(source);
+    expect(css).toMatch(/^rgb\(\d+ \d+ \d+ \/ /);
+    expect(parsed.r).toBeCloseTo(quantized.r, 6);
+    expect(parsed.g).toBeCloseTo(quantized.g, 6);
+    expect(parsed.b).toBeCloseTo(quantized.b, 6);
+    expect(parsed.a).toBeCloseTo(quantized.a, 6);
   });
 });

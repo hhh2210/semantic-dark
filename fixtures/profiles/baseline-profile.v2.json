@@ -1,0 +1,16 @@
+{
+  "$schema": "./role-profile.schema.json",
+  "schema": "semantic-dark.role-profile.v2",
+  "id": "semantic-dark.baseline-role-profile.v2",
+  "kind": "baseline",
+  "profiles": {
+    "background": {"minimumLightness": 0.08, "lightnessSpan": 0.14, "chromaScale": 0.7},
+    "surface": {"minimumLightness": 0.24, "lightnessSpan": 0.16, "chromaScale": 0.82},
+    "text": {"minimumLightness": 0.72, "lightnessSpan": 0.22, "chromaScale": 1},
+    "border": {"minimumLightness": 0.52, "lightnessSpan": 0.25, "chromaScale": 0.92},
+    "accent": {"minimumLightness": 0.58, "lightnessSpan": 0.24, "chromaScale": 1},
+    "svgFill": {"minimumLightness": 0.5, "lightnessSpan": 0.32, "chromaScale": 1},
+    "svgStroke": {"minimumLightness": 0.58, "lightnessSpan": 0.3, "chromaScale": 1}
+  },
+  "semanticSha256": "e6fd84a659b23272bfac8049abf7f5711b96abff793029340fdc942313fe6cb5"
+}
