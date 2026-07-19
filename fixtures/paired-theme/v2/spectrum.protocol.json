@@ -1,0 +1,40 @@
+{
+  "schema": "semantic-dark.paired-theme-protocol.v2",
+  "id": "spectrum",
+  "split": "development",
+  "adapterId": "spectrum-design-data-v2",
+  "source": {
+    "kind": "cascade-token-json",
+    "package": {
+      "name": "@adobe/spectrum-design-data",
+      "version": "0.12.0",
+      "integrity": "sha512-R1Nso0lDPrev//uBuxWlTsCZ1aJtlNxnF0rTnEYr9ykgzeMI9sw9nWakmqWFcy+KzF39kncDxkIOG6en/UyWQA==",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/adobe/spectrum-design-data"
+    },
+    "schemaPackage": {
+      "name": "@adobe/design-data-spec",
+      "version": "2.8.0",
+      "integrity": "sha512-4S1ZKkVEb6VCv9xZO2Uvp2R7yxjGSsUCRJXRaEriOS0GgNMD1N/sW2p0vf8QVIs6bJSbFxAQOsRwuKbbFskirg==",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/adobe/spectrum-design-data"
+    },
+    "tokenPaths": [
+      "tokens/color-palette.tokens.json",
+      "tokens/semantic-color-palette.tokens.json",
+      "tokens/color-aliases.tokens.json",
+      "tokens/color-component.tokens.json"
+    ],
+    "modeSetPath": "mode-sets/color-scheme.json",
+    "modes": {"light": "light", "dark": "dark"},
+    "schema": {
+      "specVersion": "1.0.0-draft",
+      "tokenSchemaId": "https://opensource.adobe.com/spectrum-design-data/schemas/v0/token.schema.json",
+      "modeSetSchemaId": "https://opensource.adobe.com/spectrum-design-data/schemas/v0/mode-set.schema.json"
+    }
+  },
+  "viewport": {"width": 1280, "height": 900, "deviceScaleFactor": 1},
+  "locale": "en-US",
+  "colorProfile": "srgb",
+  "limits": {"maxScenes": 24, "maxReviewedDecisions": 10}
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "semantic-dark.paired-theme-protocol.v2",
+  "id": "fluent",
+  "split": "development",
+  "adapterId": "exported-theme-object-v2",
+  "source": {
+    "kind": "exported-theme-object",
+    "package": {
+      "name": "@fluentui/react-theme",
+      "version": "9.2.1",
+      "integrity": "sha512-lJxfz7LmmglFz+c9C41qmMqaRRZZUPtPPl9DWQ79vH+JwZd4dkN7eA78OTRwcGCOTPEKoLTX72R+EFaWEDlX+w==",
+      "license": "MIT",
+      "repository": "https://github.com/microsoft/fluentui"
+    },
+    "selectors": {
+      "canvas": {"light": ["webLightTheme", "colorNeutralBackground1"], "dark": ["webDarkTheme", "colorNeutralBackground1"]},
+      "surface": {"light": ["webLightTheme", "colorNeutralBackground2"], "dark": ["webDarkTheme", "colorNeutralBackground2"]},
+      "surfaceRaised": {"light": ["webLightTheme", "colorNeutralBackground3"], "dark": ["webDarkTheme", "colorNeutralBackground3"]},
+      "textPrimary": {"light": ["webLightTheme", "colorNeutralForeground1"], "dark": ["webDarkTheme", "colorNeutralForeground1"]},
+      "textSecondary": {"light": ["webLightTheme", "colorNeutralForeground2"], "dark": ["webDarkTheme", "colorNeutralForeground2"]},
+      "tableHeader": {"light": ["webLightTheme", "colorNeutralBackground3"], "dark": ["webDarkTheme", "colorNeutralBackground3"]},
+      "selectedSurface": {"light": ["webLightTheme", "colorSubtleBackgroundSelected"], "dark": ["webDarkTheme", "colorSubtleBackgroundSelected"]},
+      "border": {"light": ["webLightTheme", "colorNeutralStroke1"], "dark": ["webDarkTheme", "colorNeutralStroke1"]},
+      "focus": {"light": ["webLightTheme", "colorStrokeFocus2"], "dark": ["webDarkTheme", "colorStrokeFocus2"]},
+      "dangerSurface": {"light": ["webLightTheme", "colorPaletteRedBackground1"], "dark": ["webDarkTheme", "colorPaletteRedBackground1"]},
+      "dangerText": {"light": ["webLightTheme", "colorNeutralForeground1"], "dark": ["webDarkTheme", "colorNeutralForeground1"]}
+    }
+  },
+  "viewport": {"width": 1280, "height": 900, "deviceScaleFactor": 1},
+  "locale": "en-US",
+  "colorProfile": "srgb",
+  "limits": {"maxScenes": 24, "maxReviewedDecisions": 10}
+}

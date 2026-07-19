@@ -1,0 +1,27 @@
+{
+  "schema": "semantic-dark.paired-theme-protocol.v2",
+  "id": "material",
+  "split": "development",
+  "adapterId": "material-color-utilities-v2",
+  "source": {
+    "kind": "generated-scheme",
+    "package": {
+      "name": "@material/material-color-utilities",
+      "version": "0.4.0",
+      "integrity": "sha512-dlq6VExJReb8dhjj3a/yTigr3ncNwoFmL5Iy2ENtbDX03EmNeOEdZ+vsaGrj7RTuO+mB7L58II4LCsl4NpM8uw==",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/material-foundation/material-color-utilities"
+    },
+    "generator": {
+      "seed": "#6750A4",
+      "variant": "tonal-spot",
+      "specVersion": "2021",
+      "platform": "phone",
+      "contrastLevel": 0
+    }
+  },
+  "viewport": {"width": 1280, "height": 900, "deviceScaleFactor": 1},
+  "locale": "en-US",
+  "colorProfile": "srgb",
+  "limits": {"maxScenes": 24, "maxReviewedDecisions": 10}
+}

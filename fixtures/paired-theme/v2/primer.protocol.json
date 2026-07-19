@@ -1,0 +1,22 @@
+{
+  "schema": "semantic-dark.paired-theme-protocol.v2",
+  "id": "primer",
+  "split": "development",
+  "adapterId": "primer-primitives-v2",
+  "source": {
+    "kind": "static-token-json",
+    "package": {
+      "name": "@primer/primitives",
+      "version": "11.9.0",
+      "integrity": "sha512-yESOalhd7s7S3unV1V32v3Z0RszXiiz6pzy6hVI9xpdTh1q1Gt8vyDFxRlqIvuwc5ZaO1+gYQTDbjxb4nWBzMw==",
+      "license": "MIT",
+      "repository": "https://github.com/primer/primitives"
+    },
+    "lightPath": "dist/docs/functional/themes/light.json",
+    "darkPath": "dist/docs/functional/themes/dark.json"
+  },
+  "viewport": {"width": 1280, "height": 900, "deviceScaleFactor": 1},
+  "locale": "en-US",
+  "colorProfile": "srgb",
+  "limits": {"maxScenes": 24, "maxReviewedDecisions": 10}
+}

@@ -1,0 +1,36 @@
+{
+  "schema": "semantic-dark.paired-theme-protocol.v2",
+  "id": "carbon",
+  "split": "development",
+  "adapterId": "exported-theme-object-v2",
+  "source": {
+    "kind": "exported-theme-object",
+    "package": {
+      "name": "@carbon/themes",
+      "version": "11.77.0",
+      "integrity": "sha512-5MGfcWiKwpIAmmtq4zlAeSkGkECaVXhr61Ol0EUFQskUlhAgeKhlIc5iWXFmwDb25oxzEFo0puH+GKsLL4GN/w==",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/carbon-design-system/carbon"
+    },
+    "selectors": {
+      "canvas": {"light": ["white", "background"], "dark": ["g100", "background"]},
+      "surface": {"light": ["white", "layer01"], "dark": ["g100", "layer01"]},
+      "surfaceRaised": {"light": ["white", "layer02"], "dark": ["g100", "layer02"]},
+      "textPrimary": {"light": ["white", "textPrimary"], "dark": ["g100", "textPrimary"]},
+      "textSecondary": {"light": ["white", "textSecondary"], "dark": ["g100", "textSecondary"]},
+      "tableHeader": {"light": ["white", "layerAccent01"], "dark": ["g100", "layerAccent01"]},
+      "selectedSurface": {"light": ["white", "layerSelected01"], "dark": ["g100", "layerSelected01"]},
+      "border": {"light": ["white", "borderSubtle01"], "dark": ["g100", "borderSubtle01"]},
+      "focus": {"light": ["white", "focus"], "dark": ["g100", "focus"]},
+      "dangerSurface": {
+        "light": ["notificationTokens", "notificationTokens", "notificationBackgroundError", "whiteTheme"],
+        "dark": ["notificationTokens", "notificationTokens", "notificationBackgroundError", "g100"]
+      },
+      "dangerText": {"light": ["white", "textPrimary"], "dark": ["g100", "textPrimary"]}
+    }
+  },
+  "viewport": {"width": 1280, "height": 900, "deviceScaleFactor": 1},
+  "locale": "en-US",
+  "colorProfile": "srgb",
+  "limits": {"maxScenes": 24, "maxReviewedDecisions": 10}
+}
