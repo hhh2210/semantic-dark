@@ -8,22 +8,26 @@ const ROLES = new Set<ColorRole>(
   ['background', 'surface', 'text', 'border', 'accent', 'svgFill', 'svgStroke'],
 );
 
-export interface DecisionLossRecord {
-  system: PairedThemeSystem;
+export interface RegisteredDecisionLossRecord<System extends string> {
+  system: System;
   sceneId: string;
   role: ColorRole;
   decisionId: string;
   loss: number;
 }
 
-export interface RankLossRecord {
-  system: PairedThemeSystem;
+export interface RegisteredRankLossRecord<System extends string> {
+  system: System;
   sceneId: string;
   pairId: string;
   loss: number;
 }
 
-export interface SystemComponentLoss {system: PairedThemeSystem; loss: number}
+export interface RegisteredSystemComponentLoss<System extends string> {system: System; loss: number}
+
+export interface DecisionLossRecord extends RegisteredDecisionLossRecord<PairedThemeSystem> {}
+export interface RankLossRecord extends RegisteredRankLossRecord<PairedThemeSystem> {}
+export interface SystemComponentLoss extends RegisteredSystemComponentLoss<PairedThemeSystem> {}
 
 export interface PairedThemeMetricInput {
   color: readonly DecisionLossRecord[];
@@ -35,29 +39,48 @@ export interface PairedThemeMetricInput {
 export function aggregateDecisionLosses(
   records: readonly DecisionLossRecord[],
 ): SystemComponentLoss[] {
-  nonEmptyArray(records, 'decision loss records');
+  return aggregateDecisionLossesForRegistryInternal(records, SYSTEMS, false);
+}
 
-  const normalized = records.map((record, index) => decisionRecord(record, index));
+/** V2-only reducer entry point: the validated spec owns the complete system registry. */
+export function aggregateDecisionLossesForRegistry<System extends string>(
+  records: readonly RegisteredDecisionLossRecord<System>[],
+  systems: ReadonlySet<System>,
+): RegisteredSystemComponentLoss<System>[] {
+  return aggregateDecisionLossesForRegistryInternal(records, systems, true);
+}
+
+function aggregateDecisionLossesForRegistryInternal<System extends string>(
+  records: readonly RegisteredDecisionLossRecord<System>[],
+  systems: ReadonlySet<System>,
+  sceneQualifiedIdentity: boolean,
+): RegisteredSystemComponentLoss<System>[] {
+  nonEmptyArray(records, 'decision loss records');
+  nonEmptyRegistry(systems);
+
+  const normalized = records.map((record, index) => decisionRecord(record, index, systems));
   normalized.sort((left, right) => compareKeys(
     [left.system, left.role, left.sceneId, left.decisionId],
     [right.system, right.role, right.sceneId, right.decisionId],
   ));
 
   const duplicateKeys = new Set<string>();
-  const systems = new Map<PairedThemeSystem, Map<ColorRole, Map<string, number[]>>>();
+  const grouped = new Map<System, Map<ColorRole, Map<string, number[]>>>();
   for (const record of normalized) {
-    const uniqueKey = JSON.stringify([record.system, record.decisionId]);
+    const uniqueKey = JSON.stringify(sceneQualifiedIdentity
+      ? [record.system, record.sceneId, record.decisionId]
+      : [record.system, record.decisionId]);
     if (duplicateKeys.has(uniqueKey)) throw new Error(
       `duplicate decision loss record: ${record.decisionId}`,
     );
     duplicateKeys.add(uniqueKey);
 
-    const roles = getOrCreate(systems, record.system, () => new Map());
+    const roles = getOrCreate(grouped, record.system, () => new Map());
     const scenes = getOrCreate(roles, record.role, () => new Map());
     getOrCreate(scenes, record.sceneId, (): number[] => []).push(record.loss);
   }
 
-  return sortedEntries(systems).map(([system, roles]) => {
+  return sortedEntries(grouped).map(([system, roles]) => {
     const roleLosses = sortedEntries(roles).map(([, scenes]) => {
       const sceneLosses = sortedEntries(scenes).map(([, losses]) => median(losses));
       return mean(sceneLosses);
@@ -68,25 +91,44 @@ export function aggregateDecisionLosses(
 
 /** Mean ordered pairs -> mean scenes -> one value per system. */
 export function aggregateRankLosses(records: readonly RankLossRecord[]): SystemComponentLoss[] {
-  nonEmptyArray(records, 'rank loss records');
+  return aggregateRankLossesForRegistryInternal(records, SYSTEMS, false);
+}
 
-  const normalized = records.map((record, index) => rankRecord(record, index));
+/** V2-only reducer entry point: the validated spec owns the complete system registry. */
+export function aggregateRankLossesForRegistry<System extends string>(
+  records: readonly RegisteredRankLossRecord<System>[],
+  systems: ReadonlySet<System>,
+): RegisteredSystemComponentLoss<System>[] {
+  return aggregateRankLossesForRegistryInternal(records, systems, true);
+}
+
+function aggregateRankLossesForRegistryInternal<System extends string>(
+  records: readonly RegisteredRankLossRecord<System>[],
+  systems: ReadonlySet<System>,
+  sceneQualifiedIdentity: boolean,
+): RegisteredSystemComponentLoss<System>[] {
+  nonEmptyArray(records, 'rank loss records');
+  nonEmptyRegistry(systems);
+
+  const normalized = records.map((record, index) => rankRecord(record, index, systems));
   normalized.sort((left, right) => compareKeys(
     [left.system, left.sceneId, left.pairId],
     [right.system, right.sceneId, right.pairId],
   ));
 
   const duplicateKeys = new Set<string>();
-  const systems = new Map<PairedThemeSystem, Map<string, number[]>>();
+  const grouped = new Map<System, Map<string, number[]>>();
   for (const record of normalized) {
-    const uniqueKey = JSON.stringify([record.system, record.pairId]);
+    const uniqueKey = JSON.stringify(sceneQualifiedIdentity
+      ? [record.system, record.sceneId, record.pairId]
+      : [record.system, record.pairId]);
     if (duplicateKeys.has(uniqueKey)) throw new Error(`duplicate rank loss record: ${record.pairId}`);
     duplicateKeys.add(uniqueKey);
-    const scenes = getOrCreate(systems, record.system, () => new Map());
+    const scenes = getOrCreate(grouped, record.system, () => new Map());
     getOrCreate(scenes, record.sceneId, (): number[] => []).push(record.loss);
   }
 
-  return sortedEntries(systems).map(([system, scenes]) => ({
+  return sortedEntries(grouped).map(([system, scenes]) => ({
     system,
     loss: mean(sortedEntries(scenes).map(([, losses]) => mean(losses))),
   }));
@@ -98,10 +140,14 @@ export function validateUnitLoss(value: number, label: string): number {
   return loss;
 }
 
-function decisionRecord(value: DecisionLossRecord, index: number): DecisionLossRecord {
+function decisionRecord<System extends string>(
+  value: RegisteredDecisionLossRecord<System>,
+  index: number,
+  systems: ReadonlySet<System>,
+): RegisteredDecisionLossRecord<System> {
   record(value, `decision loss record ${index}`);
   return {
-    system: system(value.system, `decision loss record ${index}.system`),
+    system: system(value.system, `decision loss record ${index}.system`, systems),
     sceneId: identifier(value.sceneId, `decision loss record ${index}.sceneId`),
     role: role(value.role, `decision loss record ${index}.role`),
     decisionId: identifier(value.decisionId, `decision loss record ${index}.decisionId`),
@@ -109,10 +155,14 @@ function decisionRecord(value: DecisionLossRecord, index: number): DecisionLossR
   };
 }
 
-function rankRecord(value: RankLossRecord, index: number): RankLossRecord {
+function rankRecord<System extends string>(
+  value: RegisteredRankLossRecord<System>,
+  index: number,
+  systems: ReadonlySet<System>,
+): RegisteredRankLossRecord<System> {
   record(value, `rank loss record ${index}`);
   return {
-    system: system(value.system, `rank loss record ${index}.system`),
+    system: system(value.system, `rank loss record ${index}.system`, systems),
     sceneId: identifier(value.sceneId, `rank loss record ${index}.sceneId`),
     pairId: identifier(value.pairId, `rank loss record ${index}.pairId`),
     loss: rankLoss(value.loss, `rank loss record ${index}.loss`),
@@ -141,9 +191,16 @@ function identifier(value: string, label: string): string {
   return value;
 }
 
-function system(value: PairedThemeSystem, label: string): PairedThemeSystem {
-  if (!SYSTEMS.has(value)) throw new TypeError(`${label} is not a supported design system`);
-  return value;
+function system<System extends string>(
+  value: System,
+  label: string,
+  systems: ReadonlySet<System>,
+): System {
+  const id = identifier(value, label) as System;
+  if (!systems.has(id)) throw new TypeError(
+    `${label} is not a supported design system in the validated registry`,
+  );
+  return id;
 }
 
 function role(value: ColorRole, label: string): ColorRole {
@@ -168,6 +225,12 @@ function nonEmptyArray(value: readonly unknown[], label: string): void {
   if (!Array.isArray(value) || value.length === 0) throw new Error(
     `${label} must be a non-empty array`,
   );
+}
+
+function nonEmptyRegistry<System extends string>(systems: ReadonlySet<System>): void {
+  if (!(systems instanceof Set) || systems.size === 0) {
+    throw new Error('validated system registry must be a non-empty Set');
+  }
 }
 
 function record(value: object, label: string): void {
