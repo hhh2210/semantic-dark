@@ -42,6 +42,7 @@ export interface NativeThemeDecision {
 }
 
 export interface NativeThemeDetectorLike {
+  prefersDark(): boolean;
   sample(): NativeThemeDecision;
   start(onChange: () => void): void;
   stop(): void;
@@ -83,6 +84,10 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
   private readonly notifyWhenVisible = (): void => {
     if (document.visibilityState === 'visible') this.notify();
   };
+
+  prefersDark(): boolean {
+    return this.darkPreference?.matches ?? mediaMatches('(prefers-color-scheme: dark)');
+  }
 
   sample(): NativeThemeDecision {
     const forcedColors = mediaMatches('(forced-colors: active)');

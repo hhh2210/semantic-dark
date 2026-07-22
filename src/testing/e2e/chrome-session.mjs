@@ -45,6 +45,7 @@ export async function openExtensionSession({
   profilePath,
   headless,
   viewport,
+  colorScheme,
   url,
   timeout = 15_000,
 }) {
@@ -54,6 +55,7 @@ export async function openExtensionSession({
     executablePath: chromePath,
     headless,
     viewport,
+    colorScheme,
     args: [
       // Chrome-branded builds enable these two guards by default. Disabling the
       // guards restores the documented unpacked-extension test flags.

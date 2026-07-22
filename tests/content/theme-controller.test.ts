@@ -27,6 +27,7 @@ function result(kind: NativeThemeKind): NativeThemeDecision {
 
 class FakeDetector implements NativeThemeDetectorLike {
   private change: (() => void) | null = null;
+  private dark = true;
   readonly samples: NativeThemeDecision[];
   readonly activeMarkers: boolean[] = [];
 
@@ -34,6 +35,7 @@ class FakeDetector implements NativeThemeDetectorLike {
     this.samples = [...samples];
   }
 
+  prefersDark(): boolean { return this.dark; }
   sample(): NativeThemeDecision {
     this.activeMarkers.push(document.documentElement.hasAttribute('data-semantic-dark-active'));
     return this.samples.shift() ?? result('ambiguous');
@@ -42,6 +44,10 @@ class FakeDetector implements NativeThemeDetectorLike {
   start(onChange: () => void): void { this.change = onChange; }
   stop(): void { this.change = null; }
   emit(): void { this.change?.(); }
+  setSystemDark(dark: boolean): void {
+    this.dark = dark;
+    this.emit();
+  }
 }
 
 class FakeEngine implements ThemeEngineLike {
@@ -70,6 +76,41 @@ afterEach(() => {
 });
 
 describe('ThemeController', () => {
+  it('stays inactive in auto mode while the system uses light appearance', async () => {
+    const detector = new FakeDetector(result('light'), result('light'));
+    detector.setSystemDark(false);
+    const state = harness('auto', detector);
+    await state.controller.start();
+
+    expect(state.controller.getStatus()).toMatchObject({
+      effectiveEnabled: false,
+      decision: 'system-light',
+    });
+    expect(detector.samples).toHaveLength(2);
+    expect(state.dom.enabled).toEqual([]);
+  });
+
+  it('follows system appearance changes in auto mode', async () => {
+    const detector = new FakeDetector(result('light'), result('light'));
+    detector.setSystemDark(false);
+    const state = harness('auto', detector);
+    await state.controller.start();
+
+    detector.setSystemDark(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(state.controller.getStatus()).toMatchObject({
+      effectiveEnabled: true,
+      decision: 'applied-light',
+    });
+
+    detector.setSystemDark(false);
+    expect(state.controller.getStatus()).toMatchObject({
+      effectiveEnabled: false,
+      decision: 'system-light',
+    });
+    expect(state.dom.enabled).toEqual([true, false]);
+  });
+
   it('leaves a native dark page completely inactive in auto mode', async () => {
     const state = harness('auto', new FakeDetector(result('native-dark')));
     await state.controller.start();

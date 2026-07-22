@@ -44,6 +44,7 @@ function isThemeMode(value: unknown): value is ThemeMode {
 
 export type PageThemeDecision =
   | 'pending'
+  | 'system-light'
   | 'applied-light'
   | 'native-dark'
   | 'ambiguous'

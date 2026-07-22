@@ -72,7 +72,12 @@ async function main() {
     });
     verifyBaselineState(baseline.state);
 
-    session = await openExtensionSession({...CONFIG, profilePath, url: fixture.url});
+    session = await openExtensionSession({
+      ...CONFIG,
+      profilePath,
+      url: fixture.url,
+      colorScheme: 'dark',
+    });
     try {
       await waitForProcessedState(session.page, CONFIG.timeout);
     } catch (error) {
@@ -83,21 +88,27 @@ async function main() {
       );
     }
 
-    await session.page.screenshot({path: afterPath, fullPage: true});
     const transformed = await readPageState(session.page);
     const initialMetrics = verifyTransformedState(transformed);
     const interactionMetrics = await exerciseInteractiveDomEffects(session.page, CONFIG.timeout);
 
     const expectedHost = new URL(fixture.url).host;
+    await session.page.emulateMedia({colorScheme: 'light'});
+    await waitForRestoredState(session.page, CONFIG.timeout);
     const popupLight = await inspectCurrentPopup({
       session,
       expectedHost,
-      expectedDecision: 'applied-light',
-      expectedEnabled: true,
+      expectedDecision: 'system-light',
+      expectedEnabled: false,
       screenshotPath: popupLightPath,
       colorScheme: 'light',
       timeout: CONFIG.timeout,
     });
+    verifyPopupMetrics(popupLight, {appearanceHidden: true});
+    assert.equal(popupLight.badge, 'System light');
+
+    await session.page.emulateMedia({colorScheme: 'dark'});
+    await waitForProcessedState(session.page, CONFIG.timeout);
     const popupDark = await inspectCurrentPopup({
       session,
       expectedHost,
@@ -107,10 +118,9 @@ async function main() {
       colorScheme: 'dark',
       timeout: CONFIG.timeout,
     });
-    verifyPopupMetrics(popupLight, {appearanceHidden: false});
     verifyPopupMetrics(popupDark, {appearanceHidden: false});
-    assert.equal(popupLight.badge, 'On');
     assert.equal(popupDark.badge, 'On');
+    await session.page.screenshot({path: afterPath, fullPage: true});
 
     const disableTransition = await setCurrentHostEnabled({
       session,

@@ -74,6 +74,7 @@ export class ThemeController {
 
   async recheck(): Promise<void> {
     if (!this.started || this.config.mode !== 'auto') return;
+    if (this.pauseForSystemLight()) return;
     await this.probe();
   }
 
@@ -109,6 +110,7 @@ export class ThemeController {
     }
 
     this.startDetector();
+    if (this.pauseForSystemLight()) return;
     if (modeChanged || this.status.decision === 'pending') {
       await this.probe();
     } else if (this.active) {
@@ -130,6 +132,7 @@ export class ThemeController {
 
   private handleDetectorChange(): void {
     if (!this.started || this.config.mode !== 'auto') return;
+    if (this.pauseForSystemLight()) return;
     this.cancelPendingProbe();
     if (this.active) {
       void this.probe();
@@ -139,6 +142,14 @@ export class ThemeController {
       this.timer = null;
       void this.probe();
     }, this.debounceMs);
+  }
+
+  private pauseForSystemLight(): boolean {
+    if (this.detector.prefersDark()) return false;
+    this.cancelPendingProbe();
+    this.deactivate();
+    this.setStatus('system-light', 'system-prefers-light');
+    return true;
   }
 
   private async probe(): Promise<void> {
@@ -249,7 +260,8 @@ export class ThemeController {
   }
 
   private isCurrentProbe(generation: number): boolean {
-    return this.started && this.config.mode === 'auto' && generation === this.generation;
+    return this.started && this.config.mode === 'auto' &&
+      this.detector.prefersDark() && generation === this.generation;
   }
 
   private cancelPendingProbe(): void {

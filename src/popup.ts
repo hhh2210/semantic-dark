@@ -89,6 +89,13 @@ function statusPresentation(status: PageThemeStatus): {
   locked: boolean;
 } {
   switch (status.decision) {
+    case 'system-light':
+      return {
+        badge: 'System light',
+        hint: 'Following your system appearance',
+        note: 'Semantic Dark will turn on when your system switches to dark.',
+        locked: false,
+      };
     case 'applied-light':
       return {badge: 'On', hint: 'Applied automatically to this light page', note: '', locked: false};
     case 'native-dark':

@@ -41,6 +41,8 @@ relationships, raster diagrams, and ordinary images take separate paths.
   markers, `color-scheme` negotiation, and sampled foreground/surface evidence,
   then left untouched. Uncertain pages fail closed and can be overridden
   manually.
+- Automatic mode follows the system appearance: it remains inactive in light
+  mode and transforms eligible pages only while the system uses dark mode.
 - Per-site automatic/manual mode, background, and contrast settings are stored
   locally. Stop, palette change, and popup disable restore the original
   DOM/SVG/image state and revoke generated Blob URLs.
@@ -71,6 +73,7 @@ path automatically; elsewhere set `CHROME_PATH=/absolute/path/to/chrome`.
 The E2E test starts a local fixture with a strict worker CSP, launches a
 temporary system-Chrome profile with only this extension, checks
 DOM/SVG/gradient/pseudo-element contrast, exercises hover-state restoration,
+confirms system light/dark changes restore and reapply the transformation,
 confirms authored dark pages remain untouched, audits popup target sizes in
 light and dark appearances, measures raster-worker timing, toggles the site
 through the real popup, and writes screenshots to `artifacts/`.
