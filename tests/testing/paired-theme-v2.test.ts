@@ -48,6 +48,7 @@ beforeAll(async () => {
   ));
   await writeFile(path.join(fixture.root, 'fixtures/scenes.json'), sceneBytes);
   for (const entry of document.registry.systems) entry.sceneManifestSha256 = sha256(sceneBytes);
+  document.records.sceneManifestSha256 = sha256(sceneBytes);
   const protocol = JSON.parse(readFileSync(path.join(
     process.cwd(), 'fixtures/paired-theme/v2/material.protocol.json',
   ), 'utf8')) as Record<string, any>;
@@ -179,6 +180,7 @@ describe('paired-theme v2 contract and dual-arm evaluator', () => {
   it('never applies the D/C/R non-regression tolerance to F worsening', async () => {
     const changed = structuredClone(fixture.document);
     changed.evaluationContract.componentNonRegressionTolerance = 1;
+    changed.tuning.objective.componentNonRegressionTolerance = 1;
     const tolerantContract = await loadChangedV2Spec(fixture, changed);
     const tolerantProtocol = await loadV2RegisteredProtocol(
       tolerantContract, 'material', fixture.root,

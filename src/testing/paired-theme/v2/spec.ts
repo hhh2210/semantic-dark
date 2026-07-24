@@ -11,6 +11,9 @@ import type {
   V2VariantRoles,
 } from './contract';
 import {validateV2ConfirmationRegistry} from './confirmation';
+import {validateV2HumanReviewSpec} from './spec-human-review';
+import {validateV2RecordsSpec} from './spec-records';
+import {validateV2TuningSpec} from './spec-tuning';
 const SHA256 = /^[0-9a-f]{64}$/;
 const IDENTIFIER = /^[a-z0-9][a-z0-9-]*$/;
 const loadedSpecs = new WeakSet<object>();
@@ -53,7 +56,7 @@ export function assertValidatedV2MetricSpec(value: ValidatedV2MetricSpec): void 
   }
 }
 function validateDocument(value: unknown): V2MetricSpecDocument {
-  // Non-evaluator Phase-A sections are opaque here and require their own freeze validators.
+  // Baseline, exposure, and implementation pins require their own authenticated validators.
   const input = object(value, 'v2 metric spec');
   exactKeys(input, ['$schema', 'schema', 'id', 'version', 'status', 'baseline', 'registry',
     'records', 'evaluationContract', 'humanReview', 'tuning', 'exposure',
@@ -68,13 +71,19 @@ function validateDocument(value: unknown): V2MetricSpecDocument {
   const systems = validateSystems(registryInput.systems);
   const confirmation = validateV2ConfirmationRegistry(registryInput.confirmation, systems);
   const evaluationContract = validateEvaluation(input.evaluationContract, systems);
+  const records = validateV2RecordsSpec(input.records, systems, evaluationContract.denominators);
+  const humanReview = validateV2HumanReviewSpec(input.humanReview);
+  const tuning = validateV2TuningSpec(
+    input.tuning,
+    systems,
+    evaluationContract.componentNonRegressionTolerance,
+  );
   return deepFreeze({
     $schema: nonEmpty(input.$schema, '$schema'), schema: input.schema, id: input.id,
     version: input.version, status: input.status,
     baseline: object(input.baseline, 'baseline'), registry: {systems, confirmation},
-    records: object(input.records, 'records'), evaluationContract,
-    humanReview: object(input.humanReview, 'humanReview'),
-    tuning: object(input.tuning, 'tuning'), exposure: object(input.exposure, 'exposure'),
+    records, evaluationContract, humanReview, tuning,
+    exposure: object(input.exposure, 'exposure'),
     implementationPins: object(input.implementationPins, 'implementationPins'),
   });
 }

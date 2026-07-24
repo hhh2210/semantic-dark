@@ -71,6 +71,7 @@ async function setup(system: 'carbon' | 'fluent'): Promise<{
   const sceneBytes = await readFile(COMMON_SCENES);
   await writeFile(path.join(spec.root, 'fixtures/scenes.json'), sceneBytes);
   for (const entry of document.registry.systems) entry.sceneManifestSha256 = sha256(sceneBytes);
+  document.records.sceneManifestSha256 = sha256(sceneBytes);
 
   const protocol = JSON.parse(await readFile(
     path.resolve(`fixtures/paired-theme/v2/${system}.protocol.json`), 'utf8',

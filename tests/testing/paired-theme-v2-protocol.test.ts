@@ -129,9 +129,8 @@ describe('paired-theme v2 registered protocol loader', () => {
     expect(() => assertLoadedV2RegisteredProtocol({} as never))
       .toThrow(/protocol loaded from pinned registry bytes/);
 
-    const divergent = await setup({divergentScenePin: true});
-    await expect(loadV2RegisteredProtocol(divergent.contract, 'material', divergent.spec.root))
-      .rejects.toThrow(/share one common scene-manifest path and SHA-256/);
+    await expect(setup({divergentScenePin: true}))
+      .rejects.toThrow(/records scene manifest must match every registered system/);
   });
 
   it.each([
@@ -226,6 +225,7 @@ async function setup(options: SetupOptions = {}): Promise<{
   const scenePath = path.join(spec.root, 'fixtures/scenes.json');
   await writeFile(scenePath, sceneBytes);
   for (const system of document.registry.systems) system.sceneManifestSha256 = sha256(sceneBytes);
+  document.records.sceneManifestSha256 = sha256(sceneBytes);
 
   const protocol = baseProtocol();
   options.protocolMutation?.(protocol);

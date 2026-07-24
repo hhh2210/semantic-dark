@@ -4,6 +4,9 @@ import {
   loadValidatedV2MetricSpec,
   type ValidatedV2MetricSpec,
 } from './spec';
+import type {V2HumanReviewSpec} from './spec-human-review';
+import type {V2RecordsSpec} from './spec-records';
+import type {V2TuningSpec} from './spec-tuning';
 
 const validatedContracts = new WeakSet<object>();
 
@@ -62,7 +65,7 @@ export interface V2MetricSpecDocument {
     systems: readonly V2SystemRegistryEntry[];
     confirmation: V2ConfirmationRegistry;
   };
-  records: Readonly<Record<string, unknown>>;
+  records: V2RecordsSpec;
   evaluationContract: {
     variants: {ordered: readonly string[]; roles: V2VariantRoles};
     replicatesPerSystem: number;
@@ -70,8 +73,8 @@ export interface V2MetricSpecDocument {
     metric: V2MetricConfig;
     componentNonRegressionTolerance: number;
   };
-  humanReview: Readonly<Record<string, unknown>>;
-  tuning: Readonly<Record<string, unknown>>;
+  humanReview: V2HumanReviewSpec;
+  tuning: V2TuningSpec;
   exposure: Readonly<Record<string, unknown>>;
   implementationPins: Readonly<Record<string, unknown>>;
 }
@@ -92,6 +95,7 @@ export interface V2EvaluationContract {
   readonly primaryHoldoutSystemIds: readonly string[];
   readonly reserveSystemIds: readonly string[];
   readonly confirmation: Readonly<V2ConfirmationRegistry>;
+  readonly records: Readonly<V2RecordsSpec>;
   readonly variants: {
     readonly ordered: readonly string[];
     readonly roles: Readonly<V2VariantRoles>;
@@ -139,6 +143,7 @@ export function evaluationContractFromV2MetricSpec(
     primaryHoldoutSystemIds,
     reserveSystemIds,
     confirmation: document.registry.confirmation,
+    records: document.records,
     variants: document.evaluationContract.variants,
     replicatesPerSystem: document.evaluationContract.replicatesPerSystem,
     denominators: document.evaluationContract.denominators,
