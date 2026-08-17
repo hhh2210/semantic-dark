@@ -1,0 +1,88 @@
+# Cross-Site Benchmark v2
+
+## Why the corpus is now above one hundred sites
+
+The previous pilot contained 32 candidate sites. That is useful as a mechanism smoke suite, but it is too small to support claims about cross-site generalization. Public web benchmarks use materially broader environment coverage: Mind2Web reports 2,350 tasks from 137 real websites spanning 31 domains [1], while WebLINX reports 100K interactions across more than 150 real-world websites [2]. These benchmarks are not dark-mode benchmarks, so their counts are not a direct normative requirement; they are evidence that a serious real-web evaluation should separate site diversity from repeated states on a small number of domains.
+
+WPT provides a second design reference. Its official documentation treats reftests, automated scripts, visual tests, WebDriver tests, accessibility mapping tests and manual tests as different test types, and its dashboard presents browser-specific failures across repeated runs rather than only one aggregate score [3] [4]. For semantic-dark, the corresponding unit is a controlled site-state observation: URL × viewport × system color scheme × extension mode × settle policy. A domain can produce multiple observations, but family-disjoint site splits are required for honest generalization claims.
+
+## Corpus construction
+
+The expansion began with eight independent categories and 121 researched candidates. After URL validation and host deduplication there were 115 unique researched domains. A manual supplement added 20 additional candidates; merging with the original 32 sentinels produced **154 unique domains**. Each record contains a stable ID, URL, site family, prior expected layer, page type, feature tags, access risk, source and split.
+
+| Stage | Sites | Meaning |
+|---|---:|---|
+| Legacy sentinel corpus | 32 | Existing mechanism and safety gates |
+| Researched candidate pool after deduplication | 115 | Developer docs, SaaS, media, commerce, data, education, creative and regional sites |
+| Manual supplement after merge | 17 | New domains not already present in the researched pool or sentinel set |
+| Expanded manifest | 154 | Reproducible candidate universe |
+| HTTP preflight passed | 124 | Candidates eligible for browser collection at preflight time |
+| Browser benchmark run | 132 | Includes the 124 preflight-pass set plus 8 legacy URLs whose preflight state changed |
+| Browser-loaded observations | 114 | Completed baseline, extension and restore measurement |
+
+The discrepancy between 124 preflight-pass records and 132 browser-run records is deliberate: the final run retained legacy sentinel coverage and a preflight can disagree with a browser navigation due to method, headers, redirects or timing. Browser failures remain explicitly recorded; they are not silently removed from the manifest.
+
+## Split policy
+
+The v2 manifest has three cohorts. Legacy sentinels remain in `sentinel`; new families are deterministically assigned to `core` or `held-out` using a stable family hash. If a researched URL belongs to a family already present in the sentinel set—for example, `python-docs` alongside the existing Python.org sentinel—it is also assigned to `sentinel`. The full manifest has no family-disjoint split violation.
+
+| Cohort | Full manifest | Recorded browser-run subset | Purpose |
+|---|---:|---:|---|
+| `sentinel` | 33 | 30 | Safety gates and known failure fixtures |
+| `core` | 95 | 79 | Broad development/benchmark loop |
+| `held-out` | 26 | 23 | Unseen-family generalization check |
+| Total | 154 | 132 | Candidate universe and fixed recorded run input |
+
+The split is by site family, not by URL string. A future change that adds a subdomain, localized route or product sibling must first update `site_family`; otherwise the split validator should reject it.
+
+## Browser collection and sharding
+
+The collector remains sequential and unauthenticated, but v2 adds explicit metadata preservation and resumable shards. It now supports `SEMANTIC_DARK_START_INDEX` and `SEMANTIC_DARK_MAX_SITES`, so the corpus can be run in deterministic 20–30 site shards. Navigation waits for `commit` and then uses a fixed settling delay; this reduced false timeouts for dynamic sites in smoke testing. A hard page timeout is still recorded as an exclusion rather than retried indefinitely.
+
+```bash
+pnpm build
+SEMANTIC_DARK_SITE_MANIFEST=$PWD/fixtures/evaluation/cross-site-sites.v2.json \
+SEMANTIC_DARK_OUTPUT=$HOME/scratch-data/semantic-dark-cross-site/expanded-final/site-observations.jsonl \
+SEMANTIC_DARK_START_INDEX=0 \
+SEMANTIC_DARK_MAX_SITES=25 \
+SEMANTIC_DARK_NAV_WAIT_UNTIL=commit \
+SEMANTIC_DARK_SETTLE_MS=800 \
+SEMANTIC_DARK_TIMEOUT_MS=10000 \
+pnpm benchmark:real-sites
+```
+
+A production run should preserve one JSONL row per manifest record, including HTTP status, browser status, exclusion reason, baseline screenshots and local SHA-256 hashes. Raw screenshots and DOM details remain outside Git under the local scratch directory. No login, form submission, payment, download, edit or authenticated session is used.
+
+## First expanded run
+
+| Metric | Result |
+|---|---:|
+| Manifest records in browser run | 132 |
+| Browser-loaded pages | 114 |
+| Browser exclusions | 18 |
+| Extension errors | 0 |
+| Native-dark pages loaded | 12 |
+| Native-dark false activations | 0 |
+| Automatic activations overall | 4 |
+| Loaded light-only prior labels | 38 |
+| Loaded light-only activations | 2 |
+| Loaded light-only restore-equal | 38/38 |
+| Loaded observations restore-equal | 109/114 |
+| Family split violations after v2 fix | 0 |
+
+The four automatic activations in the recorded run were `light-arxiv`, `mixed-chrome-dev`, `openstax` and `material-design`. This is a measurement of the current detector, not a claim that all 84 pages whose measured light/dark baseline profile looks light-stable should be automatically transformed. The large light no-op count is useful evidence for the next algorithm iteration, but it also exposes a labeling issue: many public pages are mixed or system-dependent even when their prior manifest label says `light-only`.
+
+The five restore failures were `mixed-observable`, `google-fonts`, `webflow`, `nextjs` and `angular`. They are retained as explicit failure IDs. The 18 browser exclusions include access controls such as 403/401/429, protocol failures and hard timeouts; the exclusion list is stored in `fixtures/evaluation/cross-site-exclusions.v1.json` and must not be treated as a model error.
+
+## Recommended benchmark gates
+
+The next CI gate should report three independent panels. The **safety panel** requires zero automatic activation on loaded `native-dark` sentinels and zero owned-marker leakage after light-to-dark restoration. The **coverage panel** reports activation on pages whose measured light baseline is stable, but does not force activation for mixed/system-dependent pages. The **reliability panel** reports browser exclusions, extension errors, restore mismatches and per-feature coverage; a run with a high exclusion rate should be marked incomplete rather than scored as a high-performing run.
+
+For the current 132-site run, the native-dark safety panel passes: 12 loaded native-dark pages produced 12 no-op decisions and zero native-dark activations. The broad coverage panel is intentionally not yet a pass because only 2 of 38 prior `light-only` loaded pages activated. This makes the expanded benchmark useful: it prevents us from mistaking a small pilot's two successful light cases for general coverage.
+
+## References
+
+[1]: https://osu-nlp-group.github.io/Mind2Web/ "Mind2Web official project page"
+[2]: https://proceedings.mlr.press/v235/lu24e.html "WebLINX: Real-World Website Navigation with Multi-Turn Dialogue"
+[3]: https://web-platform-tests.org/test-suite-design.html "Web Platform Tests: Test Suite Design"
+[4]: https://wpt.fyi/results/ "Web Platform Tests dashboard"
