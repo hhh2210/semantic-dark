@@ -48,6 +48,28 @@ describe('DomThemeEngine', () => {
     expect(card.style.getPropertyValue('--semantic-dark-color')).toMatch(/^rgb/);
   });
 
+  it('maps inherited text containers instead of leaving black nested text on dark surfaces', async () => {
+    document.body.innerHTML = `
+      <article style="background:#fff;color:#000">
+        <h2 style="color:#111"><span>Nested heading</span></h2>
+        <p style="color:#222">Inherited paragraph text</p>
+      </article>`;
+    const article = document.querySelector<HTMLElement>('article')!;
+    const heading = document.querySelector<HTMLElement>('h2')!;
+    const paragraph = document.querySelector<HTMLElement>('p')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    document.documentElement.setAttribute('data-semantic-dark-active', '');
+    engine.start();
+    await nextTask();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(article.hasAttribute('data-semantic-dark-color')).toBe(true);
+    expect(heading.hasAttribute('data-semantic-dark-color')).toBe(true);
+    expect(paragraph.hasAttribute('data-semantic-dark-color')).toBe(true);
+    expect(article.style.getPropertyValue('--semantic-dark-color')).toMatch(/^rgb/);
+  });
+
   it('restores every extension-owned attribute and variable when disabled', async () => {
     document.body.innerHTML = '<p id="text" style="color:#222">Readable</p>';
     const text = document.querySelector<HTMLElement>('#text')!;

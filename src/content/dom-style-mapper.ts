@@ -1,4 +1,4 @@
-import {mapColor, mapCssGradient} from '../color/index';
+import {mapColor, mapCssGradient, parseCssColor} from '../color/index';
 import type {ThemeConfig} from '../types';
 import {DOM_ATTRIBUTE as ATTR, DOM_VARIABLE as VAR} from './dom-style-contract';
 
@@ -50,19 +50,22 @@ function pseudoSnapshot(element: HTMLElement, pseudo: '::before' | '::after'): P
 }
 
 function isTransparent(color: string): boolean {
-  const normalized = color.replaceAll(' ', '').toLowerCase();
-  return normalized === 'transparent' ||
-    normalized === 'rgba(0,0,0,0)' ||
-    normalized.endsWith(',0)') ||
-    normalized.endsWith('/0)') ||
-    normalized.endsWith('/0%)');
+  if (color.trim().toLowerCase() === 'transparent') return true;
+  const parsed = parseCssColor(color);
+  return parsed !== null && parsed.a <= 1e-6;
 }
 
 function ownsRenderedText(element: HTMLElement): boolean {
   if (element.matches('input, textarea, select, option, button')) return true;
-  return [...element.childNodes].some((node) =>
+  if ([...element.childNodes].some((node) =>
     node.nodeType === Node.TEXT_NODE && (node.textContent?.trim().length ?? 0) > 0
-  );
+  )) return true;
+  // Containers can paint inherited text through nested spans/strong/links. Mapping
+  // only direct text nodes leaves the container's own text color black after its
+  // background is converted to dark. Descendants are processed afterwards and
+  // can override this inherited fallback with their own mapped/accent colors.
+  return element.childElementCount > 0 &&
+    (element.textContent?.trim().length ?? 0) > 0;
 }
 
 function hasVisibleBorder(style: PaintSnapshot): boolean {

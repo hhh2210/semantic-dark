@@ -8,6 +8,9 @@ import {
 const BASE: NativeThemeEvidence = {
   forcedColors: false,
   negotiatedDark: false,
+  declaredLight: false,
+  lightCanvas: false,
+  visibleContent: true,
   rootDarkMarker: false,
   knownSamples: 9,
   darkCoverage: 0,
@@ -28,6 +31,16 @@ describe('native theme classification', () => {
     }));
     expect(result.kind).toBe('native-dark');
     expect(result.reason).toBe('dark-rendered-surfaces');
+  });
+
+  it('recognizes an explicit light scheme with sparse safe samples', () => {
+    const result = classifyNativeTheme(evidence({
+      declaredLight: true,
+      lightCanvas: true,
+      knownSamples: 0,
+    }));
+    expect(result.kind).toBe('light');
+    expect(result.reason).toBe('explicit-light-scheme');
   });
 
   it('lets strong light rendering override a negotiated dark declaration', () => {
@@ -54,6 +67,26 @@ describe('native theme classification', () => {
       darkOnLightCoherence: 0.75,
     }));
     expect(result.kind).toBe('ambiguous');
+  });
+
+  it('fails closed when there is no visible page content', () => {
+    const result = classifyNativeTheme(evidence({
+      declaredLight: true,
+      lightCanvas: true,
+      visibleContent: false,
+      knownSamples: 0,
+    }));
+    expect(result.kind).toBe('ambiguous');
+    expect(result.reason).toBe('insufficient-stable-theme-evidence');
+  });
+
+  it('accepts four consistent light samples without weakening the dark-page gate', () => {
+    const result = classifyNativeTheme(evidence({
+      knownSamples: 4,
+      lightCoverage: 1,
+      darkOnLightCoherence: 1,
+    }));
+    expect(result.kind).toBe('light');
   });
 
   it('does not mistake a dark hero on a mostly light page for native dark', () => {

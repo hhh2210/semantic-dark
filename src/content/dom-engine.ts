@@ -163,7 +163,8 @@ export class DomThemeEngine {
   private drain(deadline: IdleDeadlineLike): void {
     this.idleHandle = null;
     let processed = 0;
-    while (this.queue.length > 0 && (processed < 80 || deadline.timeRemaining() > 2)) {
+    const timeoutBudget = deadline.didTimeout ? 240 : 80;
+    while (this.queue.length > 0 && (processed < timeoutBudget || deadline.timeRemaining() > 2)) {
       const element = this.queue.shift()!;
       if (!this.queued.has(element)) continue;
       this.queued.delete(element);

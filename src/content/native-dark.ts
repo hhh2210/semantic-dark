@@ -27,6 +27,9 @@ export type NativeThemeKind = 'native-dark' | 'light' | 'ambiguous' | 'forced-co
 export interface NativeThemeEvidence {
   forcedColors: boolean;
   negotiatedDark: boolean;
+  declaredLight: boolean;
+  lightCanvas: boolean;
+  visibleContent: boolean;
   rootDarkMarker: boolean;
   knownSamples: number;
   darkCoverage: number;
@@ -53,10 +56,15 @@ export function classifyNativeTheme(evidence: NativeThemeEvidence): NativeThemeD
     (evidence.darkCoverage >= 0.65 && evidence.lightOnDarkCoherence >= 0.55) ||
     evidence.darkCoverage >= 0.78
   );
-  const strongLight = evidence.knownSamples >= 5 &&
+  const strongLight = evidence.visibleContent && evidence.knownSamples >= 4 &&
     evidence.lightCoverage >= 0.7 &&
     evidence.darkCoverage <= 0.2 &&
     evidence.darkOnLightCoherence >= 0.55;
+  const explicitLight = evidence.visibleContent && evidence.declaredLight && evidence.lightCanvas &&
+    !evidence.negotiatedDark && !evidence.rootDarkMarker &&
+    (evidence.knownSamples === 0 || (
+      evidence.lightCoverage >= 0.5 && evidence.darkCoverage < 0.4
+    ));
 
   if (evidence.forcedColors) return decision('forced-colors', 'forced-colors-active', evidence);
   if (strongDark) return decision('native-dark', 'dark-rendered-surfaces', evidence);
@@ -71,6 +79,7 @@ export function classifyNativeTheme(evidence: NativeThemeEvidence): NativeThemeD
     return decision('native-dark', 'dark-color-scheme-without-light-conflict', evidence);
   }
   if (strongLight) return decision('light', 'light-rendered-surfaces', evidence);
+  if (explicitLight) return decision('light', 'explicit-light-scheme', evidence);
   return decision('ambiguous', 'insufficient-stable-theme-evidence', evidence);
 }
 
@@ -93,12 +102,16 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
     const forcedColors = mediaMatches('(forced-colors: active)');
     const prefersDark = mediaMatches('(prefers-color-scheme: dark)');
     const negotiatedDark = selectedSchemeIsDark(prefersDark);
+    const declaredLight = selectedSchemeIsLight(prefersDark);
     const visual = sampleViewport(negotiatedDark);
     return classifyNativeTheme({
       forcedColors,
       negotiatedDark,
-      rootDarkMarker: hasRootDarkMarker(),
       ...visual,
+      declaredLight,
+      lightCanvas: hasLightCanvas(),
+      visibleContent: hasVisibleContent(),
+      rootDarkMarker: hasRootDarkMarker(),
     });
   }
 
@@ -138,7 +151,7 @@ function decision(
 }
 
 function sampleViewport(negotiatedDark: boolean): Omit<NativeThemeEvidence,
-  'forcedColors' | 'negotiatedDark' | 'rootDarkMarker'> {
+  'forcedColors' | 'negotiatedDark' | 'declaredLight' | 'lightCanvas' | 'visibleContent' | 'rootDarkMarker'> {
   const width = Math.max(document.documentElement.clientWidth, window.innerWidth);
   const height = Math.max(document.documentElement.clientHeight, window.innerHeight);
   const canvas = negotiatedDark ? srgb(18 / 255, 18 / 255, 18 / 255) : srgb(1, 1, 1);
@@ -198,11 +211,44 @@ function sampleElement(element: Element, canvas: SrgbColor): {
   return foreground ? {background, foreground} : null;
 }
 
+function hasVisibleContent(): boolean {
+  const body = document.body;
+  if (!body) return false;
+  const candidates = body.querySelectorAll('*');
+  for (const candidate of candidates) {
+    if (isExtensionElement(candidate)) continue;
+    if (candidate.matches('script,style,link,meta,noscript,template')) continue;
+    const element = candidate as HTMLElement;
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    if (rect.width <= 0 || rect.height <= 0 || style.display === 'none' || style.visibility === 'hidden') continue;
+    if ((element.textContent?.trim().length ?? 0) > 0 || candidate.matches(MEDIA_SELECTOR)) return true;
+  }
+  return false;
+}
+
+function hasLightCanvas(): boolean {
+  for (const element of [document.body, document.documentElement]) {
+    if (!element) continue;
+    const color = parseCssColor(getComputedStyle(element).backgroundColor);
+    if (color && color.a >= 0.9) return relativeLuminance(color) >= LIGHT_LUMINANCE;
+  }
+  return false;
+}
+
 function selectedSchemeIsDark(prefersDark: boolean): boolean {
+  return schemeValueSelectsDark(selectedSchemeValue(), prefersDark);
+}
+
+function selectedSchemeIsLight(prefersDark: boolean): boolean {
+  return schemeValueSelectsLight(selectedSchemeValue(), prefersDark);
+}
+
+function selectedSchemeValue(): string {
   const computed = getComputedStyle(document.documentElement).colorScheme.trim().toLowerCase();
   const meta = document.querySelector<HTMLMetaElement>('meta[name="color-scheme" i]')
     ?.content.trim().toLowerCase() ?? '';
-  return schemeValueSelectsDark(computed === 'normal' ? meta : computed, prefersDark);
+  return computed === 'normal' ? meta : computed;
 }
 
 function schemeValueSelectsDark(value: string, prefersDark: boolean): boolean {
@@ -210,6 +256,13 @@ function schemeValueSelectsDark(value: string, prefersDark: boolean): boolean {
   const dark = tokens.includes('dark');
   const light = tokens.includes('light');
   return dark && (!light || prefersDark);
+}
+
+function schemeValueSelectsLight(value: string, prefersDark: boolean): boolean {
+  const tokens = value.split(/\s+/).filter((token) => token && token !== 'only');
+  const dark = tokens.includes('dark');
+  const light = tokens.includes('light');
+  return light && (!dark || !prefersDark);
 }
 
 function hasRootDarkMarker(): boolean {

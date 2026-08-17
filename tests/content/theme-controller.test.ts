@@ -13,6 +13,9 @@ import {DEFAULT_THEME, type ThemeConfig, type ThemeMode} from '../../src/types';
 const EVIDENCE = {
   forcedColors: false,
   negotiatedDark: false,
+  declaredLight: false,
+  lightCanvas: false,
+  visibleContent: true,
   rootDarkMarker: false,
   knownSamples: 9,
   darkCoverage: 0,
