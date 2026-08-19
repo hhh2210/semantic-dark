@@ -7,7 +7,7 @@ import {
 import type {NativeThemeDecision, NativeThemeDetectorLike} from './native-dark';
 import {beginDocumentTransitionGuard, endDocumentTransitionGuard, flushDocumentStyle}
   from './dom-style-contract';
-import {OfficialThemeLane, type OfficialThemeLaneLike} from './official-theme';
+import {OfficialThemeLane, officialThemeLooksApplied, type OfficialThemeLaneLike} from './official-theme';
 const ACTIVE_ATTRIBUTE = 'data-semantic-dark-active';
 const MAX_OFFICIAL_ATTEMPTS = 2;
 
@@ -203,10 +203,17 @@ export class ThemeController {
     }
     this.deactivate();
     if (result.kind === 'native-dark') {
-      this.setStatus(
-        this.officialTheme.isApplied() ? 'official-dark' : 'native-dark',
-        this.officialTheme.isApplied() ? 'official-theme-activated' : result.reason,
-      );
+      if (this.officialTheme.isApplied()) {
+        if (officialThemeLooksApplied(result)) {
+          this.setStatus('official-dark', 'official-theme-activated');
+          return;
+        }
+        this.releaseOfficialTheme();
+        this.activate();
+        this.setStatus('applied-light', 'official-theme-lost-visual-dark');
+        return;
+      }
+      this.setStatus('native-dark', result.reason);
       return;
     }
     this.releaseOfficialTheme();
@@ -222,7 +229,7 @@ export class ThemeController {
     await this.stableDelay();
     if (!this.isCurrentProbe(generation)) return true;
     const after = this.sampleAuthoredTheme();
-    if (after.kind === 'native-dark') {
+    if (officialThemeLooksApplied(after)) {
       this.deactivate();
       this.setStatus('official-dark', 'official-theme-activated');
       return true;

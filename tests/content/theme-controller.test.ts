@@ -11,11 +11,11 @@ import {
 } from '../../src/content/theme-controller';
 import {DEFAULT_THEME, type ThemeConfig, type ThemeMode} from '../../src/types';
 
-const EVIDENCE = {
+const LIGHT_EVIDENCE = {
   forcedColors: false,
   negotiatedDark: false,
   declaredLight: false,
-  lightCanvas: false,
+  lightCanvas: true,
   visibleContent: true,
   rootDarkMarker: false,
   knownSamples: 9,
@@ -25,8 +25,28 @@ const EVIDENCE = {
   darkOnLightCoherence: 1,
 };
 
+const DARK_EVIDENCE = {
+  ...LIGHT_EVIDENCE,
+  lightCanvas: false,
+  darkCoverage: 0.86,
+  lightCoverage: 0,
+  lightOnDarkCoherence: 0.8,
+  darkOnLightCoherence: 0,
+};
+
 function result(kind: NativeThemeKind): NativeThemeDecision {
-  return {kind, reason: `fixture-${kind}`, evidence: EVIDENCE};
+  if (kind === 'native-dark') {
+    return {kind, reason: 'dark-rendered-surfaces', evidence: DARK_EVIDENCE};
+  }
+  return {kind, reason: `fixture-${kind}`, evidence: LIGHT_EVIDENCE};
+}
+
+function markerOnlyNativeDark(): NativeThemeDecision {
+  return {
+    kind: 'native-dark',
+    reason: 'active-root-dark-marker',
+    evidence: LIGHT_EVIDENCE,
+  };
 }
 
 class FakeDetector implements NativeThemeDetectorLike {
@@ -310,6 +330,21 @@ describe('ThemeController', () => {
       effectiveEnabled: true,
       decision: 'user-on',
     });
+    expect(state.dom.enabled).toEqual([true]);
+  });
+
+  it('does not keep an official marker that failed to visually darken the page', async () => {
+    const official = new FakeOfficial();
+    const state = harness(
+      'auto',
+      new FakeDetector(result('light'), result('light'), markerOnlyNativeDark()),
+      async () => {},
+      official,
+    );
+    await state.controller.start();
+
+    expect(state.controller.getStatus().decision).toBe('applied-light');
+    expect(official.applied).toBe(false);
     expect(state.dom.enabled).toEqual([true]);
   });
 });

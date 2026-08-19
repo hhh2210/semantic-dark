@@ -15,8 +15,9 @@ beside native-dark detection.
    existing fail-closed behavior. Semantic Dark stays off.
 3. If the page is stably light: try a reversible official switch when one is
    known.
-4. Re-sample. If the page is now native-dark, keep the official mutation and
-   report `official-dark`. Engines stay off.
+4. Re-sample. Official success requires **visual** dark evidence
+   (`dark-rendered-surfaces` or a dark `color-scheme` with dark coverage). A
+   root marker we just wrote is not enough.
 5. If the official switch does not darken the page, restore the snapshot and
    run the Semantic Dark transform (`applied-light`).
 6. After two failed official attempts on the same page, skip official
@@ -26,18 +27,21 @@ Manual force-on restores any official mutation first, then applies the
 transform. System light and site disable restore it as well.
 
 The lane does not click theme toggles, rewrite URLs, or write cookies. Cookie
-persistence (for example Bilibili `theme_style`) is left to the site so
-disabling the extension does not leave a stored account preference.
+persistence (for example Bilibili `theme_style`) is left to live investigation
+in [MANUS-OFFICIAL-THEME-HANDOFF.md](MANUS-OFFICIAL-THEME-HANDOFF.md).
 
 ## Two kinds of official signal
 
 **Generic.** Common dual-theme contracts already on the root node:
 
-- `data-theme`, `data-color-mode`, `data-bs-theme`, and related attributes
-  whose current value is a light token (`light`, `day`, `light-mode`,
-  `theme-light`)
-- exact class tokens such as `theme-light` / `light-mode` swapped to their dark
-  counterparts
+- `data-theme`, `data-color-mode`, `data-bs-theme`, `theme`, `lab-style`, and
+  related attributes whose current value is a light or follow-system token
+  (`light`, `day`, `auto`, `system`, `light-mode`, `theme-light`)
+- boolean dark attributes already present with a light value (`dark="false"`)
+- exact class tokens such as `theme-light` / `light-theme` swapped to their
+  dark counterparts
+- inert W3C alternate stylesheets titled Dark/Night, or `prefers-color-scheme:
+  dark` stylesheets that are `disabled` / `media=none`
 
 Declaring `color-scheme: light dark` without a switch we can flip is **not**
 treated as a recipe. If the site does not follow the system, the transform
@@ -49,11 +53,13 @@ a known root marker even when the light page has no `data-theme=light` yet:
 | Site | Host suffix | Official switch |
 | --- | --- | --- |
 | Zhihu | `zhihu.com` | `html[data-theme="dark"]` |
-| Bilibili | `bilibili.com` | `html.dark` and `body.dark` |
+| Bilibili | `bilibili.com` | `html.dark`, `body.dark`, `html[lab-style="dark"]` |
+| Juejin | `juejin.cn` | `data-theme="dark"` plus `.dark-theme` on html/body |
 
 These entries exist so daily-use Chinese sites with first-party dark CSS are
 not inverted on top of that CSS. New seeds must be reversible root markers
-with a restore snapshot, not injected stylesheets.
+with a restore snapshot, not injected stylesheets. Unknown switches go to the
+Manus handoff instead of growing this table by guesswork.
 
 ## Status surface
 
@@ -69,4 +75,5 @@ with a restore snapshot, not injected stylesheets.
 - It does not grow into host-specific color patches when official CSS is
   missing.
 - It does not relax native-dark thresholds to chase activation rate.
+- It does not treat Darkmode.js mix-blend widgets as official site themes.
 - Visual quality of the transform lane is a separate problem from this gate.

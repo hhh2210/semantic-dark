@@ -1,21 +1,18 @@
 import {
-  matchOfficialThemeSite,
   type OfficialThemeMutation,
-  type OfficialThemeSite,
   type OfficialThemeTarget,
 } from './official-theme-catalog';
 import {
-  darkClassForLightClass,
-  darkValueForThemeToken,
-  THEME_ATTRIBUTES,
-} from './theme-markers';
+  probeOfficialTheme,
+  type OfficialThemeProbe,
+} from './official-theme-recipes';
 
-export interface OfficialThemeProbe {
-  capable: boolean;
-  source: 'none' | 'catalog' | 'theme-attribute' | 'theme-class' | 'catalog+generic';
-  catalogId: string | null;
-  recipes: OfficialThemeMutation[];
-}
+export {
+  officialThemeLooksApplied,
+  probeOfficialTheme,
+  type OfficialThemeProbe,
+  type OfficialThemeSource,
+} from './official-theme-recipes';
 
 export interface OfficialThemeLaneLike {
   probe(): OfficialThemeProbe;
@@ -34,9 +31,17 @@ interface RootSnapshot {
   attributes: Array<{name: string; value: string | null}>;
 }
 
+interface StylesheetSnapshot {
+  href: string;
+  title: string;
+  disabled: boolean;
+  media: string;
+}
+
 interface OfficialThemeSession {
   html: RootSnapshot;
   body: RootSnapshot | null;
+  stylesheets: StylesheetSnapshot[];
 }
 
 export class OfficialThemeLane implements OfficialThemeLaneLike {
@@ -61,9 +66,13 @@ export class OfficialThemeLane implements OfficialThemeLaneLike {
     const body = this.documentRef.body;
     const htmlAttributes = attributeNames(probe.recipes, 'html');
     const bodyAttributes = attributeNames(probe.recipes, 'body');
+    const stylesheetTargets = stylesheetRecipes(probe.recipes)
+      .map((recipe) => snapshotStylesheet(this.documentRef, recipe))
+      .filter((snapshot): snapshot is StylesheetSnapshot => snapshot !== null);
     this.session = {
       html: snapshotRoot(html, htmlAttributes),
       body: body ? snapshotRoot(body, bodyAttributes) : null,
+      stylesheets: stylesheetTargets,
     };
     for (const recipe of probe.recipes) applyMutation(this.documentRef, recipe);
     return true;
@@ -75,78 +84,13 @@ export class OfficialThemeLane implements OfficialThemeLaneLike {
     if (this.session.body && this.documentRef.body) {
       restoreRoot(this.documentRef.body, this.session.body);
     }
+    for (const snapshot of this.session.stylesheets) restoreStylesheet(this.documentRef, snapshot);
     this.session = null;
   }
 
   isApplied(): boolean {
     return this.session !== null;
   }
-}
-
-export function probeOfficialTheme(root: Document, host: string): OfficialThemeProbe {
-  const site = matchOfficialThemeSite(host);
-  const generic = genericRecipes(root);
-  const recipes = dedupeRecipes([...(site?.mutations ?? []), ...generic]);
-  return {
-    capable: recipes.length > 0,
-    source: probeSource(site, generic),
-    catalogId: site?.id ?? null,
-    recipes,
-  };
-}
-
-function probeSource(
-  site: OfficialThemeSite | null,
-  generic: readonly OfficialThemeMutation[],
-): OfficialThemeProbe['source'] {
-  if (site && generic.length > 0) return 'catalog+generic';
-  if (site) return 'catalog';
-  if (generic.some((recipe) => recipe.type === 'attribute')) return 'theme-attribute';
-  if (generic.length > 0) return 'theme-class';
-  return 'none';
-}
-
-function genericRecipes(root: Document): OfficialThemeMutation[] {
-  const recipes: OfficialThemeMutation[] = [];
-  for (const target of ['html', 'body'] as const) {
-    const element = targetElement(root, target);
-    if (!element) continue;
-    for (const name of THEME_ATTRIBUTES) {
-      const current = element.getAttribute(name);
-      if (!current) continue;
-      const dark = darkValueForThemeToken(current);
-      if (dark && dark !== current) {
-        recipes.push({type: 'attribute', target, name, value: dark});
-      }
-    }
-    const remove: string[] = [];
-    const add: string[] = [];
-    for (const token of [...element.classList]) {
-      const dark = darkClassForLightClass(token);
-      if (!dark) continue;
-      remove.push(token);
-      add.push(dark);
-    }
-    if (add.length > 0) recipes.push({type: 'class', target, add, remove});
-  }
-  return recipes;
-}
-
-function dedupeRecipes(recipes: readonly OfficialThemeMutation[]): OfficialThemeMutation[] {
-  const seen = new Set<string>();
-  const unique: OfficialThemeMutation[] = [];
-  for (const recipe of recipes) {
-    const key = recipeKey(recipe);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(recipe);
-  }
-  return unique;
-}
-
-function recipeKey(recipe: OfficialThemeMutation): string {
-  if (recipe.type === 'attribute') return `attr:${recipe.target}:${recipe.name}:${recipe.value}`;
-  return `class:${recipe.target}:${[...recipe.add].sort().join(',')}:${[...(recipe.remove ?? [])].sort().join(',')}`;
 }
 
 function attributeNames(
@@ -159,6 +103,13 @@ function attributeNames(
         recipe.type === 'attribute' && recipe.target === target)
       .map((recipe) => recipe.name),
   )];
+}
+
+function stylesheetRecipes(
+  recipes: readonly OfficialThemeMutation[],
+): Array<Extract<OfficialThemeMutation, {type: 'stylesheet'}>> {
+  return recipes.filter((recipe): recipe is Extract<OfficialThemeMutation, {type: 'stylesheet'}> =>
+    recipe.type === 'stylesheet');
 }
 
 function snapshotRoot(element: Element, attributeNamesToStore: readonly string[]): RootSnapshot {
@@ -178,6 +129,13 @@ function restoreRoot(element: Element, snapshot: RootSnapshot): void {
 }
 
 function applyMutation(root: Document, recipe: OfficialThemeMutation): void {
+  if (recipe.type === 'stylesheet') {
+    const link = findStylesheet(root, recipe.href, recipe.title);
+    if (!link) return;
+    link.disabled = recipe.disabled;
+    link.media = recipe.media;
+    return;
+  }
   const element = targetElement(root, recipe.target);
   if (!element) return;
   if (recipe.type === 'attribute') {
@@ -186,6 +144,38 @@ function applyMutation(root: Document, recipe: OfficialThemeMutation): void {
   }
   if (recipe.remove) element.classList.remove(...recipe.remove);
   element.classList.add(...recipe.add);
+}
+
+function snapshotStylesheet(
+  root: Document,
+  recipe: Extract<OfficialThemeMutation, {type: 'stylesheet'}>,
+): StylesheetSnapshot | null {
+  const link = findStylesheet(root, recipe.href, recipe.title);
+  if (!link) return null;
+  return {
+    href: recipe.href,
+    title: recipe.title,
+    disabled: link.disabled,
+    media: link.media,
+  };
+}
+
+function restoreStylesheet(root: Document, snapshot: StylesheetSnapshot): void {
+  const link = findStylesheet(root, snapshot.href, snapshot.title);
+  if (!link) return;
+  link.disabled = snapshot.disabled;
+  link.media = snapshot.media;
+}
+
+function findStylesheet(root: Document, href: string, title: string): HTMLLinkElement | null {
+  const links = [...root.querySelectorAll('link')].filter((node): node is HTMLLinkElement =>
+    node instanceof HTMLLinkElement);
+  if (href) {
+    const match = links.find((link) => link.getAttribute('href') === href);
+    if (match) return match;
+  }
+  if (title) return links.find((link) => link.title === title) ?? null;
+  return null;
 }
 
 function targetElement(root: Document, target: OfficialThemeTarget): Element | null {

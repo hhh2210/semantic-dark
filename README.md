@@ -42,12 +42,16 @@ relationships, raster diagrams, and ordinary images take separate paths.
   then left untouched. Uncertain pages fail closed and can be overridden
   manually.
 - When a still-light page exposes a reversible official dark-mode switch,
-  automatic mode prefers that switch over the Semantic Dark transform. Zhihu
-  (`data-theme`) and Bilibili (root `.dark` classes) are seed examples; generic
-  `data-theme` / `data-color-mode` light-to-dark flips use the same path. If the
-  official switch does not actually darken the page, the mutation is restored
-  and the transform lane runs instead. See
-  [docs/OFFICIAL-THEME.md](docs/OFFICIAL-THEME.md).
+  automatic mode prefers that switch over the Semantic Dark transform. Generic
+  flips cover `data-theme` / `data-color-mode` / `auto` / `system`, boolean
+  `dark="false"`, light-to-dark root classes, and inert dark alternate
+  stylesheets. Zhihu, Bilibili, and Juejin are seed hosts whose official CSS
+  can turn on even when the light page has no `data-theme=light` yet. A marker
+  we just wrote is not enough: the page must actually look dark, or the
+  snapshot is restored and the transform lane runs. See
+  [docs/OFFICIAL-THEME.md](docs/OFFICIAL-THEME.md). Sites whose switch is still
+  unknown are listed in
+  [docs/MANUS-OFFICIAL-THEME-HANDOFF.md](docs/MANUS-OFFICIAL-THEME-HANDOFF.md).
 - Automatic mode follows the system appearance: it remains inactive in light
   mode and transforms eligible pages only while the system uses dark mode.
 - Per-site automatic/manual mode, background, and contrast settings are stored
@@ -81,7 +85,8 @@ The E2E test starts a local fixture with a strict worker CSP, launches a
 temporary system-Chrome profile with only this extension, checks
 DOM/SVG/gradient/pseudo-element contrast, exercises hover-state restoration,
 confirms system light/dark changes restore and reapply the transformation,
-confirms authored dark pages remain untouched, audits popup target sizes in
+confirms authored dark pages remain untouched, prefers a page's official dark
+switch when one exists, audits popup target sizes in
 light and dark appearances, measures raster-worker timing, toggles the site
 through the real popup, and writes screenshots to `artifacts/`.
 

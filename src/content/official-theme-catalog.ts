@@ -7,7 +7,8 @@ export type OfficialThemeTarget = 'html' | 'body';
 
 export type OfficialThemeMutation =
   | {type: 'attribute'; target: OfficialThemeTarget; name: string; value: string}
-  | {type: 'class'; target: OfficialThemeTarget; add: readonly string[]; remove?: readonly string[]};
+  | {type: 'class'; target: OfficialThemeTarget; add: readonly string[]; remove?: readonly string[]}
+  | {type: 'stylesheet'; href: string; title: string; disabled: boolean; media: string};
 
 export interface OfficialThemeSite {
   id: string;
@@ -29,6 +30,17 @@ export const OFFICIAL_THEME_SEED: readonly OfficialThemeSite[] = [
     mutations: [
       {type: 'class', target: 'html', add: ['dark']},
       {type: 'class', target: 'body', add: ['dark']},
+      {type: 'attribute', target: 'html', name: 'lab-style', value: 'dark'},
+    ],
+  },
+  {
+    id: 'juejin',
+    hostSuffixes: ['juejin.cn'],
+    mutations: [
+      {type: 'attribute', target: 'html', name: 'data-theme', value: 'dark'},
+      {type: 'attribute', target: 'body', name: 'data-theme', value: 'dark'},
+      {type: 'class', target: 'html', add: ['dark-theme'], remove: ['light-theme']},
+      {type: 'class', target: 'body', add: ['dark-theme'], remove: ['light-theme']},
     ],
   },
 ];
