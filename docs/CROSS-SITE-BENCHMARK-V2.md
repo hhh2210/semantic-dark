@@ -109,7 +109,7 @@ Four label reviews were measured in two independent runs before being applied: `
 
 ## First v3 run
 
-The first v3 browser run contains one JSONL row for each of the 169 manifest records. It loaded 150/169 pages (88.76%); the 42-site quality-core subset loaded 40/42 pages (95.24%), and all 15 v3 supplement sites passed preflight. The panels below are intentionally independent; no weighted total score is introduced.
+The first v3 browser run contains one JSONL row for each of the 169 manifest records. Aggregate panel numbers are frozen in `fixtures/evaluation/cross-site-v3-run.v1.json`; raw JSONL and screenshots stay in scratch. It loaded 150/169 pages (88.76%); the 42-site quality-core subset loaded 40/42 pages (95.24%), and all 15 v3 supplement sites passed preflight. The panels below are intentionally independent; no weighted total score is introduced.
 
 | Panel | Metric | v3 result | Gate status |
 |---|---|---:|---|

@@ -4,12 +4,20 @@
 
 ## 当前结论（先读这个）
 
-v2 录到的 **2/38 light-only activation** 同时被两件事压低了：
+第一轮 v3 已经跑完，数字冻在 `fixtures/evaluation/cross-site-v3-run.v1.json`，过程见 [MANUS-BENCHMARK-HANDOFF-RESULT.md](MANUS-BENCHMARK-HANDOFF-RESULT.md)。
 
-1. **标签噪声。** 许多 `expected_layer: light-only` 实际是 `system-dark-or-mixed`。覆盖率分母必须用测量到的 `light-stable`，不能用先验标签。
-2. **检测器过严。** 透明 canvas、CSS gradient、cookie 横幅会让 3×3 采样变成 `ambiguous`。仓库里已经修了这三类，并加了 `implicitLight`（至少 2 个浅色样本、`darkCoverage < 0.35`、无 negotiated dark / dark marker）。
+| Panel | 结果 | 状态 |
+|---|---|---|
+| Loading | 150/169 loaded（88.76%）；quality-core 40/42（95.24%）；supplement 15/15 preflight | 通过 |
+| Coverage | `measuredLightStable` **64/108（59.26%）**，高于 v2 的 4/114 自动激活 | 描述性提高 |
+| Safety | `falseActivations = [lottiefiles]` | **veto，未通过** |
+| Reliability | 19 exclusions + 10 restore failures | ID/原因留在 scratch，未删站点 |
 
-安全门没变：native-dark 误激活仍是否决项。Carbon 那类“声明 light 但画布是深色”必须继续 no-op。
+四个独立复核标签已 applied：`light-python → light-only`，`aws-documentation → dynamic-mixed`，`threejs → dynamic-mixed`，`looker → light-only`。
+
+**下一步只做 `lottiefiles` 诊断。** 不要放宽 native-dark 阈值，不要删 sentinel，不要为了覆盖率发明加权总分。两次 targeted repeat 不一致（一次 light-stable no-op，一次未 loaded），因此还不能改标。
+
+v2 的 2/38 同时被标签噪声和过严检测压低；覆盖率分母必须继续用测量到的 `light-stable`。
 
 ## 你要交付什么
 
@@ -78,7 +86,7 @@ pnpm benchmark:quality \
 
 ### 4. 清洗标签（先测量，后改 JSON）
 
-`cross-site-sites.v3-supplement.json` 里的 `label_reviews` 现在全是 `proposed`。规则：
+`cross-site-sites.v3-supplement.json` 里四个优先 review 已经 `applied`。其余先验 light-only（`apple-iphone-store`、`awwwards`、`dribbble` 等）仍按下面规则处理：
 
 - 仅当两次独立采集的 `observed_theme_profile` 一致，才把对应 review 改成 `status: applied` 并填 `to`
 - `light-stable` → 保持或改为 `light-only`

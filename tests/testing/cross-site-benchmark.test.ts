@@ -65,6 +65,18 @@ describe('cross-site v3 supplement', () => {
     expect(python?.label_status).toBe('reviewed');
     expect(aws?.expected_layer).toBe('dynamic-mixed');
     expect(aws?.label_status).toBe('reviewed');
+    expect(merged.sites.find((site) => site.id === 'threejs')).toMatchObject({
+      expected_layer: 'dynamic-mixed',
+      label_status: 'reviewed',
+    });
+    expect(merged.sites.find((site) => site.id === 'looker')).toMatchObject({
+      expected_layer: 'light-only',
+      label_status: 'reviewed',
+    });
+    expect(merged.sites.find((site) => site.id === 'lottiefiles')).toMatchObject({
+      expected_layer: 'native-dark',
+      label_status: 'prior',
+    });
   });
 
   it('keeps the checked-in v3 manifest identical to a fresh merge', async () => {
@@ -129,6 +141,39 @@ describe('exclusion list', () => {
     const exclusions = await loadJson<{sites: Array<{id: string}>}>(EXCLUSIONS);
     const ids = new Set(manifest.sites.map((site) => site.id));
     for (const site of exclusions.sites) expect(ids.has(site.id), site.id).toBe(true);
+  });
+});
+
+describe('frozen v3 run', () => {
+  it('records the safety veto and measured coverage without a blended score', async () => {
+    const run = await loadJson<{
+      site_count: number;
+      browser: {loaded: number; quality_core_loaded: number};
+      panels: {
+        safety: {false_activations: string[]; status: string};
+        coverage: {measured_light_stable_active: number; measured_light_stable_denominator: number};
+        reliability: {browser_exclusions: number; restore_failures: number};
+      };
+      boundaries: {
+        native_dark_threshold_relaxed: boolean;
+        sentinels_deleted: boolean;
+        auth_bypass: boolean;
+      };
+    }>(path.join(ROOT, 'fixtures/evaluation/cross-site-v3-run.v1.json'));
+    expect(run.site_count).toBe(169);
+    expect(run.browser.loaded).toBe(150);
+    expect(run.browser.quality_core_loaded).toBe(40);
+    expect(run.panels.safety.false_activations).toEqual(['lottiefiles']);
+    expect(run.panels.safety.status).toBe('fail-veto');
+    expect(run.panels.coverage.measured_light_stable_active).toBe(64);
+    expect(run.panels.coverage.measured_light_stable_denominator).toBe(108);
+    expect(run.panels.reliability.browser_exclusions).toBe(19);
+    expect(run.panels.reliability.restore_failures).toBe(10);
+    expect(run.boundaries).toMatchObject({
+      native_dark_threshold_relaxed: false,
+      sentinels_deleted: false,
+      auth_bypass: false,
+    });
   });
 });
 

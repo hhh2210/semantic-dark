@@ -1,0 +1,64 @@
+{
+  "schema": "semantic-dark.cross-site-run.v3",
+  "captured_at": "2026-08-19T13:32:52.000Z",
+  "manifest": "fixtures/evaluation/cross-site-sites.v3.json",
+  "report": "docs/MANUS-BENCHMARK-HANDOFF-RESULT.md",
+  "site_count": 169,
+  "preflight": {
+    "ok": 150,
+    "excluded": 19,
+    "supplement_ok": 15,
+    "supplement_total": 15,
+    "quality_core_ok": 41,
+    "quality_core_total": 42
+  },
+  "browser": {
+    "loaded": 150,
+    "total": 169,
+    "loaded_rate": 0.887574,
+    "quality_core_loaded": 40,
+    "quality_core_total": 42,
+    "quality_core_loaded_rate": 0.952381,
+    "extension_errors": 0
+  },
+  "panels": {
+    "safety": {
+      "false_activations": ["lottiefiles"],
+      "status": "fail-veto",
+      "policy": "retain-sentinel-do-not-relax-native-dark-threshold"
+    },
+    "coverage": {
+      "measured_light_stable_active": 64,
+      "measured_light_stable_denominator": 108,
+      "rate": 0.592593,
+      "v2_automatic_activations": 4,
+      "v2_loaded": 114,
+      "denominator": "measured-light-stable-not-prior-light-only"
+    },
+    "reliability": {
+      "browser_exclusions": 19,
+      "restore_failures": 10,
+      "status": "review-required",
+      "ids_retained_outside_git": true
+    }
+  },
+  "label_reviews_applied": [
+    {"id": "light-python", "to": "light-only", "run1": "light-stable", "run2": "light-stable"},
+    {"id": "aws-documentation", "to": "dynamic-mixed", "run1": "system-dark-or-mixed", "run2": "system-dark-or-mixed"},
+    {"id": "threejs", "to": "dynamic-mixed", "run1": "author-dark-static", "run2": "author-dark-static"},
+    {"id": "looker", "to": "light-only", "run1": "light-stable", "run2": "light-stable"}
+  ],
+  "verify": {
+    "test_files": 45,
+    "tests": 278,
+    "typecheck": "passed",
+    "build": "passed"
+  },
+  "boundaries": {
+    "login": false,
+    "auth_bypass": false,
+    "personal_history": false,
+    "native_dark_threshold_relaxed": false,
+    "sentinels_deleted": false
+  }
+}
