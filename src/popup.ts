@@ -98,6 +98,13 @@ function statusPresentation(status: PageThemeStatus): {
       };
     case 'applied-light':
       return {badge: 'On', hint: 'Applied automatically to this light page', note: '', locked: false};
+    case 'official-dark':
+      return {
+        badge: 'Site dark',
+        hint: "Using this site's official dark appearance",
+        note: 'Semantic Dark stays off so the site theme can apply. Turn on to override it.',
+        locked: false,
+      };
     case 'native-dark':
       return {
         badge: 'Already dark',

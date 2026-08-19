@@ -18,6 +18,7 @@ import {
   type NativeThemeEvidence,
   type NativeThemeKind,
 } from './native-theme-evidence';
+import {isDarkClassToken, THEME_ATTRIBUTES} from './theme-markers';
 
 export {
   classifyNativeTheme,
@@ -31,21 +32,13 @@ export {
 
 const GRID = [0.1, 0.5, 0.9] as const;
 const MEDIA_SELECTOR = 'img,video,canvas,svg,iframe,object,embed';
-const DARK_CLASSES = new Set(['dark', 'dark-mode', 'theme-dark', 'is-dark']);
-const THEME_ATTRIBUTES = [
-  'data-theme',
-  'data-bs-theme',
-  'data-color-mode',
-  'data-color-theme',
-  'data-mode',
-  'data-dark-mode',
-] as const;
 
 export interface NativeThemeDetectorLike {
   prefersDark(): boolean;
   sample(): NativeThemeDecision;
   start(onChange: () => void): void;
   stop(): void;
+  withSuppressedAuthoredChanges?(run: () => void): void;
 }
 
 export class NativeDarkDetector implements NativeThemeDetectorLike {
@@ -92,6 +85,15 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
     this.authoredThemeObserver.start();
     document.addEventListener('visibilitychange', this.notifyWhenVisible);
     window.addEventListener('pageshow', this.notify);
+  }
+
+  withSuppressedAuthoredChanges(run: () => void): void {
+    this.authoredThemeObserver?.suspend();
+    try {
+      run();
+    } finally {
+      this.authoredThemeObserver?.resume();
+    }
   }
 
   stop(): void {
@@ -244,7 +246,7 @@ function schemeValueSelectsLight(value: string, prefersDark: boolean): boolean {
 function hasRootDarkMarker(): boolean {
   for (const element of [document.documentElement, document.body]) {
     if (!element) continue;
-    if ([...element.classList].some((token) => DARK_CLASSES.has(token.toLowerCase()))) return true;
+    if ([...element.classList].some((token) => isDarkClassToken(token))) return true;
     for (const attribute of THEME_ATTRIBUTES) {
       const tokens = (element.getAttribute(attribute) ?? '').toLowerCase().split(/[\s_:.-]+/);
       if (tokens.includes('dark')) return true;

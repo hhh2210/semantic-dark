@@ -226,4 +226,25 @@ describe('native theme classification', () => {
     detector.stop();
     lateBody.replaceWith(originalBody);
   });
+
+  it('does not treat official theme activation as an authored theme change', async () => {
+    const detector = new NativeDarkDetector();
+    let changes = 0;
+    detector.start(() => { changes += 1; });
+    document.documentElement.setAttribute('data-theme', 'light');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const afterAuthored = changes;
+
+    detector.withSuppressedAuthoredChanges(() => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(changes).toBe(afterAuthored);
+
+    document.documentElement.setAttribute('data-theme', 'light');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(changes).toBeGreaterThan(afterAuthored);
+    detector.stop();
+    document.documentElement.removeAttribute('data-theme');
+  });
 });

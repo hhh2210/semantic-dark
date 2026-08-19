@@ -41,6 +41,13 @@ relationships, raster diagrams, and ordinary images take separate paths.
   markers, `color-scheme` negotiation, and sampled foreground/surface evidence,
   then left untouched. Uncertain pages fail closed and can be overridden
   manually.
+- When a still-light page exposes a reversible official dark-mode switch,
+  automatic mode prefers that switch over the Semantic Dark transform. Zhihu
+  (`data-theme`) and Bilibili (root `.dark` classes) are seed examples; generic
+  `data-theme` / `data-color-mode` light-to-dark flips use the same path. If the
+  official switch does not actually darken the page, the mutation is restored
+  and the transform lane runs instead. See
+  [docs/OFFICIAL-THEME.md](docs/OFFICIAL-THEME.md).
 - Automatic mode follows the system appearance: it remains inactive in light
   mode and transforms eligible pages only while the system uses dark mode.
 - Per-site automatic/manual mode, background, and contrast settings are stored

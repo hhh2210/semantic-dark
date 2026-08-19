@@ -7,7 +7,9 @@ import {
 import type {NativeThemeDecision, NativeThemeDetectorLike} from './native-dark';
 import {beginDocumentTransitionGuard, endDocumentTransitionGuard, flushDocumentStyle}
   from './dom-style-contract';
+import {OfficialThemeLane, type OfficialThemeLaneLike} from './official-theme';
 const ACTIVE_ATTRIBUTE = 'data-semantic-dark-active';
+const MAX_OFFICIAL_ATTEMPTS = 2;
 
 export interface ThemeEngineLike {
   update(config: ThemeConfig): void;
@@ -25,6 +27,7 @@ export interface ThemeControllerOptions {
   stableDelay?: () => Promise<void>;
   debounceMs?: number;
   onStatus?: (status: PageThemeStatus) => void;
+  officialTheme?: OfficialThemeLaneLike;
 }
 
 export class ThemeController {
@@ -39,6 +42,8 @@ export class ThemeController {
   private generation = 0;
   private timer: number | null = null;
   private status: PageThemeStatus;
+  private readonly officialTheme: OfficialThemeLaneLike;
+  private officialFailures = 0;
 
   constructor(
     config: ThemeConfig,
@@ -51,6 +56,7 @@ export class ThemeController {
     this.stableDelay = options.stableDelay ?? (() => delay(120));
     this.debounceMs = options.debounceMs ?? 100;
     this.onStatus = options.onStatus;
+    this.officialTheme = options.officialTheme ?? new OfficialThemeLane();
     this.status = {
       mode: this.config.mode,
       effectiveEnabled: false,
@@ -93,17 +99,21 @@ export class ThemeController {
     this.cancelPendingProbe();
     this.stopDetector();
     this.deactivate();
+    this.releaseOfficialTheme();
+    this.officialFailures = 0;
   }
 
   private async reconcile(modeChanged: boolean): Promise<void> {
     if (this.config.mode === 'off') {
       this.stopDetector();
       this.deactivate();
+      this.releaseOfficialTheme();
       this.setStatus('user-off', 'disabled-by-user');
       return;
     }
     if (this.config.mode === 'on') {
       this.stopDetector();
+      this.releaseOfficialTheme();
       this.activate();
       this.setStatus('user-on', 'forced-on-by-user');
       return;
@@ -148,6 +158,7 @@ export class ThemeController {
     if (this.detector.prefersDark()) return false;
     this.cancelPendingProbe();
     this.deactivate();
+    this.releaseOfficialTheme();
     this.setStatus('system-light', 'system-prefers-light');
     return true;
   }
@@ -169,6 +180,11 @@ export class ThemeController {
           : ambiguousConfirmation(result, confirmation);
       }
       if (!this.isCurrentProbe(generation)) return;
+      if (result.kind === 'light') {
+        const official = await this.preferOfficialTheme(generation);
+        if (!this.isCurrentProbe(generation)) return;
+        if (official) return;
+      }
       this.applyDecision(result);
     } catch {
       if (this.isCurrentProbe(generation)) {
@@ -180,14 +196,52 @@ export class ThemeController {
 
   private applyDecision(result: NativeThemeDecision): void {
     if (result.kind === 'light') {
+      this.releaseOfficialTheme();
       this.activate();
       this.setStatus('applied-light', result.reason);
       return;
     }
     this.deactivate();
-    if (result.kind === 'native-dark') this.setStatus('native-dark', result.reason);
-    else if (result.kind === 'forced-colors') this.setStatus('forced-colors', result.reason);
+    if (result.kind === 'native-dark') {
+      this.setStatus(
+        this.officialTheme.isApplied() ? 'official-dark' : 'native-dark',
+        this.officialTheme.isApplied() ? 'official-theme-activated' : result.reason,
+      );
+      return;
+    }
+    this.releaseOfficialTheme();
+    if (result.kind === 'forced-colors') this.setStatus('forced-colors', result.reason);
     else this.setStatus('ambiguous', result.reason);
+  }
+
+  private async preferOfficialTheme(generation: number): Promise<boolean> {
+    if (this.officialFailures >= MAX_OFFICIAL_ATTEMPTS) return false;
+    this.mutateAuthoredTheme(() => this.officialTheme.activate());
+    if (!this.officialTheme.isApplied()) return false;
+    flushDocumentStyle(document.documentElement);
+    await this.stableDelay();
+    if (!this.isCurrentProbe(generation)) return true;
+    const after = this.sampleAuthoredTheme();
+    if (after.kind === 'native-dark') {
+      this.deactivate();
+      this.setStatus('official-dark', 'official-theme-activated');
+      return true;
+    }
+    this.releaseOfficialTheme();
+    this.officialFailures += 1;
+    return false;
+  }
+
+  private releaseOfficialTheme(): void {
+    this.mutateAuthoredTheme(() => this.officialTheme.restore());
+  }
+
+  private mutateAuthoredTheme(run: () => void): void {
+    if (this.detector.withSuppressedAuthoredChanges) {
+      this.detector.withSuppressedAuthoredChanges(run);
+      return;
+    }
+    run();
   }
 
   private activate(): void {
