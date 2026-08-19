@@ -80,6 +80,33 @@ The next CI gate should report three independent panels. The **safety panel** re
 
 For the current 132-site run, the native-dark safety panel passes: 12 loaded native-dark pages produced 12 no-op decisions and zero native-dark activations. The broad coverage panel is intentionally not yet a pass because only 2 of 38 prior `light-only` loaded pages activated. This makes the expanded benchmark useful: it prevents us from mistaking a small pilot's two successful light cases for general coverage.
 
+## v3 yield and scoring corrections
+
+v2's 2/38 figure mixed two different failures: noisy prior labels, and a detector that abstained on ordinary light documents. v3 keeps the frozen v2 universe and adds a supplement instead of rewriting history.
+
+| Change | Why |
+|---|---|
+| Coverage denominator is measured `light-stable` | A page labeled `light-only` that follows system dark is not a miss |
+| Transparent html/body counts as the UA light canvas | Wikipedia-class pages rarely set an opaque canvas or `color-scheme: light` |
+| CSS gradients are sampleable; `url()` backgrounds still abstain | Gradient cards were zeroing the 3×3 grid |
+| Viewport cookie banners are skipped | Overlays were being sampled as the page theme |
+| Implicit light requires ≥2 samples and `darkCoverage < 0.35` | Avoids blank-page activation and Carbon-style false lights |
+| Collector resume, Chrome UA, consent-button dismiss | Preflight/browser yield was being spent on 403/timeout noise |
+| `fixtures/evaluation/cross-site-sites.v3-supplement.json` | URL repairs, 15 public docs/media replacements, quality-core IDs |
+
+Regenerate the resolved v3 manifest, then collect:
+
+```bash
+pnpm benchmark:merge-supplement
+SEMANTIC_DARK_SITE_MANIFEST=$PWD/fixtures/evaluation/cross-site-sites.v3.json \
+pnpm benchmark:preflight
+SEMANTIC_DARK_SITE_MANIFEST=$PWD/fixtures/evaluation/cross-site-sites.v3.json \
+pnpm benchmark:real-sites
+pnpm benchmark:quality <observations.jsonl> $PWD/fixtures/evaluation/cross-site-sites.v3.json
+```
+
+Proposed label reviews in the supplement stay `proposed` until a measured run confirms them. Collection and cleaning follow-ups live in [MANUS-BENCHMARK-HANDOFF.md](MANUS-BENCHMARK-HANDOFF.md).
+
 ## References
 
 [1]: https://osu-nlp-group.github.io/Mind2Web/ "Mind2Web official project page"

@@ -1,0 +1,383 @@
+{
+  "schema": "semantic-dark.cross-site-sites.v3-supplement",
+  "base_schema": "semantic-dark.cross-site-sites.v2",
+  "created_at": "2026-08-19T11:50:00.000Z",
+  "purpose": "Repair broken v2 URLs, add high-yield public light/docs pages, and mark a quality-core subset. Do not treat prior expected_layer as coverage ground truth.",
+  "url_repairs": [
+    {
+      "id": "ikea-sofas",
+      "url": "https://www.ikea.com/us/en/",
+      "reason": "v2 category path returned HTTP 404 in preflight; regional homepage is the stable public catalog entry."
+    }
+  ],
+  "label_reviews": [
+    {
+      "id": "light-python",
+      "from": "light-only",
+      "to": "dynamic-mixed",
+      "status": "proposed",
+      "reason": "Pilot already notes a dark banner plus light body, code, and images. Coverage must not require automatic activation."
+    },
+    {
+      "id": "aws-documentation",
+      "from": "light-only",
+      "to": "dynamic-mixed",
+      "status": "proposed",
+      "reason": "AWS docs follow system appearance on many routes. Measure light/dark baselines before scoring as light-stable."
+    },
+    {
+      "id": "threejs",
+      "from": "light-only",
+      "to": "dynamic-mixed",
+      "status": "proposed",
+      "reason": "Marketing/docs hybrid with WebGL hero; likely mixed or native-dark depending on route."
+    },
+    {
+      "id": "looker",
+      "from": "light-only",
+      "to": "dynamic-mixed",
+      "status": "proposed",
+      "reason": "Cloud product page, not a stable document canvas; high chance of system-dark or auth wall."
+    }
+  ],
+  "quality_core_ids": [
+    "native-github",
+    "native-mdn",
+    "native-huggingface",
+    "native-carbon",
+    "native-youtube",
+    "native-tailwind",
+    "native-supabase",
+    "native-vercel",
+    "native-linear",
+    "native-raycast",
+    "light-pluralis",
+    "light-arxiv",
+    "light-hackernews",
+    "light-w3c",
+    "light-wikipedia",
+    "light-python",
+    "light-pypi",
+    "light-lobsters",
+    "mixed-primer",
+    "mixed-spectrum",
+    "mixed-observable",
+    "mixed-web-platform",
+    "mixed-chrome-dev",
+    "mixed-react",
+    "mixed-d3",
+    "mixed-grafana",
+    "mixed-figma",
+    "mixed-vue",
+    "mixed-svelte",
+    "python-docs",
+    "nodejs-api-docs",
+    "postgresql-docs",
+    "go-docs",
+    "sqlite-docs",
+    "django-docs",
+    "openstax",
+    "cppreference",
+    "bootstrap",
+    "rfc-editor",
+    "php-docs",
+    "nginx-docs",
+    "flask-docs"
+  ],
+  "new_sites": [
+    {
+      "id": "rfc-editor",
+      "url": "https://www.rfc-editor.org/rfc/rfc9110.html",
+      "expected_layer": "light-only",
+      "family": "rfc-editor",
+      "site_family": "rfc-editor",
+      "page_type": "docs",
+      "features": ["long-page", "table", "code"],
+      "access_risk": "low",
+      "reason": "Stable IETF HTML RFC: long-form light document, tables, and monospace. Replacement-class docs sample after commercial 403s.",
+      "source": "v3-supplement",
+      "host": "rfc-editor.org",
+      "split": "core"
+    },
+    {
+      "id": "php-docs",
+      "url": "https://www.php.net/manual/en/",
+      "expected_layer": "light-only",
+      "family": "php",
+      "site_family": "php",
+      "page_type": "docs",
+      "features": ["code", "table", "long-page", "form"],
+      "access_risk": "low",
+      "reason": "PHP manual index is a public, unauthenticated light documentation surface with code and tables.",
+      "source": "v3-supplement",
+      "host": "php.net",
+      "split": "core"
+    },
+    {
+      "id": "nginx-docs",
+      "url": "https://nginx.org/en/docs/",
+      "expected_layer": "light-only",
+      "family": "nginx",
+      "site_family": "nginx",
+      "page_type": "docs",
+      "features": ["code", "long-page", "table"],
+      "access_risk": "low",
+      "reason": "nginx.org docs are a plain light document corpus with configuration examples.",
+      "source": "v3-supplement",
+      "host": "nginx.org",
+      "split": "core"
+    },
+    {
+      "id": "mediawiki",
+      "url": "https://www.mediawiki.org/wiki/MediaWiki",
+      "expected_layer": "light-only",
+      "family": "mediawiki",
+      "site_family": "mediawiki",
+      "page_type": "docs",
+      "features": ["long-page", "table", "image", "form"],
+      "access_risk": "low",
+      "reason": "MediaWiki project wiki: Vector/Minerva light article chrome, independent of the Wikipedia.org sentinel family.",
+      "source": "v3-supplement",
+      "host": "mediawiki.org",
+      "split": "held-out"
+    },
+    {
+      "id": "flask-docs",
+      "url": "https://flask.palletsprojects.com/en/stable/",
+      "expected_layer": "light-only",
+      "family": "flask",
+      "site_family": "flask",
+      "page_type": "docs",
+      "features": ["code", "long-page", "table"],
+      "access_risk": "low",
+      "reason": "Read-the-Docs-style Python documentation that is usually reachable when the RTD marketing homepage times out.",
+      "source": "v3-supplement",
+      "host": "flask.palletsprojects.com",
+      "split": "core"
+    },
+    {
+      "id": "ruby-lang-docs",
+      "url": "https://www.ruby-lang.org/en/documentation/",
+      "expected_layer": "light-only",
+      "family": "ruby-lang",
+      "site_family": "ruby-lang",
+      "page_type": "docs",
+      "features": ["long-page", "code"],
+      "access_risk": "low",
+      "reason": "Official Ruby documentation portal; public, low bot-risk, typically light canvas.",
+      "source": "v3-supplement",
+      "host": "ruby-lang.org",
+      "split": "core"
+    },
+    {
+      "id": "apache-httpd-docs",
+      "url": "https://httpd.apache.org/docs/current/",
+      "expected_layer": "light-only",
+      "family": "apache-httpd",
+      "site_family": "apache-httpd",
+      "page_type": "docs",
+      "features": ["code", "long-page", "table"],
+      "access_risk": "low",
+      "reason": "Apache HTTP Server current docs: long light pages with code and tables.",
+      "source": "v3-supplement",
+      "host": "httpd.apache.org",
+      "split": "core"
+    },
+    {
+      "id": "wiktionary",
+      "url": "https://en.wiktionary.org/wiki/Wiktionary:Main_Page",
+      "expected_layer": "light-only",
+      "family": "wiktionary",
+      "site_family": "wiktionary",
+      "page_type": "education",
+      "features": ["long-page", "table", "form", "image"],
+      "access_risk": "low",
+      "reason": "Dictionary article chrome with search, tables, and media; family-disjoint from Wikipedia sentinel.",
+      "source": "v3-supplement",
+      "host": "en.wiktionary.org",
+      "split": "core"
+    },
+    {
+      "id": "wikimedia-commons",
+      "url": "https://commons.wikimedia.org/wiki/Main_Page",
+      "expected_layer": "light-only",
+      "family": "wikimedia-commons",
+      "site_family": "wikimedia-commons",
+      "page_type": "media",
+      "features": ["image", "form", "long-page"],
+      "access_risk": "low",
+      "reason": "Public media-library replacement after Unsplash/Pexels 401/403. No login, no download crawl.",
+      "source": "v3-supplement",
+      "host": "commons.wikimedia.org",
+      "split": "core"
+    },
+    {
+      "id": "wikinews",
+      "url": "https://en.wikinews.org/wiki/Main_Page",
+      "expected_layer": "light-only",
+      "family": "wikinews",
+      "site_family": "wikinews",
+      "page_type": "news",
+      "features": ["image", "long-page"],
+      "access_risk": "low",
+      "reason": "Public news-layout replacement after Reuters 401 / NPR timeout. No paywall expected on the main page.",
+      "source": "v3-supplement",
+      "host": "en.wikinews.org",
+      "split": "core"
+    },
+    {
+      "id": "loc-gov",
+      "url": "https://www.loc.gov/",
+      "expected_layer": "dynamic-mixed",
+      "family": "library-of-congress",
+      "site_family": "library-of-congress",
+      "page_type": "government",
+      "features": ["image", "form", "long-page", "table"],
+      "access_risk": "low",
+      "reason": "US cultural-heritage portal as a government replacement after NIH/Census 403. Confirm live preflight; do not bypass blocks.",
+      "source": "v3-supplement",
+      "host": "loc.gov",
+      "split": "held-out"
+    },
+    {
+      "id": "css-tricks",
+      "url": "https://css-tricks.com/",
+      "expected_layer": "dynamic-mixed",
+      "family": "css-tricks",
+      "site_family": "css-tricks",
+      "page_type": "docs",
+      "features": ["long-page", "image", "code", "form"],
+      "access_risk": "low",
+      "reason": "Independent CSS writing with code samples and article chrome; held-out family by v2 hash.",
+      "source": "v3-supplement",
+      "host": "css-tricks.com",
+      "split": "held-out"
+    },
+    {
+      "id": "jquery-api",
+      "url": "https://api.jquery.com/",
+      "expected_layer": "light-only",
+      "family": "jquery",
+      "site_family": "jquery",
+      "page_type": "docs",
+      "features": ["code", "long-page", "form"],
+      "access_risk": "low",
+      "reason": "jQuery API documentation: searchable light reference pages. Held-out by family hash.",
+      "source": "v3-supplement",
+      "host": "api.jquery.com",
+      "split": "held-out"
+    },
+    {
+      "id": "gnu-manuals",
+      "url": "https://www.gnu.org/manual/manual.html",
+      "expected_layer": "light-only",
+      "family": "gnu",
+      "site_family": "gnu",
+      "page_type": "docs",
+      "features": ["long-page", "table"],
+      "access_risk": "low",
+      "reason": "GNU manual index: plain light HTML, useful as a low-decoration document control.",
+      "source": "v3-supplement",
+      "host": "gnu.org",
+      "split": "core"
+    },
+    {
+      "id": "lua-manual",
+      "url": "https://www.lua.org/manual/5.4/",
+      "expected_layer": "light-only",
+      "family": "lua",
+      "site_family": "lua",
+      "page_type": "docs",
+      "features": ["code", "long-page", "table"],
+      "access_risk": "low",
+      "reason": "Lua 5.4 reference manual: compact light documentation with code and tables.",
+      "source": "v3-supplement",
+      "host": "lua.org",
+      "split": "core"
+    }
+  ],
+  "replacement_queue": [
+    {
+      "replaces": "canva",
+      "page_type": "design",
+      "status": "needs-preflight",
+      "notes": "Homepage 403. Find a public marketing or docs URL in a new family, or drop the slot. Do not log in.",
+      "candidates": [
+        {"id": "pencil", "url": "https://pencil.evolus.vn/", "reason": "Open-source UI design tool site; verify live."},
+        {"id": "penpot-docs", "url": "https://help.penpot.app/", "reason": "Public design-tool docs if the marketing origin is blocked."}
+      ]
+    },
+    {
+      "replaces": "pexels",
+      "page_type": "media",
+      "status": "accepted",
+      "notes": "v3 adds wikimedia-commons as the public media replacement. Keep Pexels in exclusions.",
+      "candidates": [
+        {"id": "wikimedia-commons", "url": "https://commons.wikimedia.org/wiki/Main_Page", "reason": "Already in new_sites."}
+      ]
+    },
+    {
+      "replaces": "unsplash",
+      "page_type": "media",
+      "status": "accepted",
+      "notes": "401 via bot interstitial. Do not chase CDNs. Commons covers the media-library slot.",
+      "candidates": []
+    },
+    {
+      "replaces": "reuters",
+      "page_type": "news",
+      "status": "accepted",
+      "notes": "401. v3 adds wikinews. Additional public-news candidates still need preflight.",
+      "candidates": [
+        {"id": "wikinews", "url": "https://en.wikinews.org/wiki/Main_Page", "reason": "Already in new_sites."},
+        {"id": "propublica", "url": "https://www.propublica.org/", "reason": "Nonprofit newsroom; preflight before adding."}
+      ]
+    },
+    {
+      "replaces": "nih",
+      "page_type": "government",
+      "status": "needs-preflight",
+      "notes": "Many .gov hosts 403 datacenter crawlers. loc-gov is the first candidate; if it 403s, record exclusion and stop.",
+      "candidates": [
+        {"id": "loc-gov", "url": "https://www.loc.gov/", "reason": "Already in new_sites."},
+        {"id": "nasa", "url": "https://www.nasa.gov/", "reason": "Only add after a 200-class preflight from the same collector UA."}
+      ]
+    },
+    {
+      "replaces": "adidas-running-shoes",
+      "page_type": "ecommerce",
+      "status": "needs-preflight",
+      "notes": "Brand storefronts are high 403/geo. Prefer a public catalog that does not require region cookies. ikea URL was repaired to the regional homepage; do not add more bot-hostile shops until that repair loads in-browser.",
+      "candidates": [
+        {"id": "shopify-theme-store", "url": "https://themes.shopify.com/", "reason": "Public theme gallery; verify not 403."}
+      ]
+    },
+    {
+      "replaces": "read-the-docs",
+      "page_type": "docs",
+      "status": "accepted",
+      "notes": "Marketing homepage timed out. flask-docs is a real RTD-hosted manual.",
+      "candidates": [
+        {"id": "flask-docs", "url": "https://flask.palletsprojects.com/en/stable/", "reason": "Already in new_sites."}
+      ]
+    },
+    {
+      "replaces": "kaggle",
+      "page_type": "community",
+      "status": "needs-preflight",
+      "notes": "Preflight 404 is likely a bot response, not a missing page. Do not guess an alternate path. Optional public docs: https://www.kaggle.com/docs if it returns 200 with the collector UA.",
+      "candidates": [
+        {"id": "kaggle-docs", "url": "https://www.kaggle.com/docs", "reason": "Only promote if preflight_ok."}
+      ]
+    },
+    {
+      "replaces": "codepen",
+      "page_type": "community",
+      "status": "needs-preflight",
+      "notes": "403. Native-dark community slot. Do not load user pens or authenticate.",
+      "candidates": [
+        {"id": "jsfiddle", "url": "https://jsfiddle.net/", "reason": "Public editor landing; confirm theme and 200."}
+      ]
+    }
+  ]
+}

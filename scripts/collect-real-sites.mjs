@@ -1,15 +1,21 @@
-import {mkdtemp, mkdir, rm, readFile, writeFile} from 'node:fs/promises';
+import {mkdtemp, mkdir, rm, readFile, writeFile, access} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
 import {PNG} from 'pngjs';
+import {
+  CONSENT_BUTTON_LABELS,
+  CROSS_SITE_BROWSER_UA,
+  DEFAULT_V2_MANIFEST,
+  DEFAULT_V3_MANIFEST,
+} from './cross-site-policy.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(SCRIPT_DIR, '..');
 const DATA_ROOT = process.env.SEMANTIC_DARK_DATA_ROOT ?? path.join(process.env.HOME ?? '/home/ubuntu', 'scratch-data', 'semantic-dark-cross-site');
-const MANIFEST_PATH = process.env.SEMANTIC_DARK_SITE_MANIFEST ?? path.join(DATA_ROOT, 'sites.v1.json');
+const MANIFEST_PATH = process.env.SEMANTIC_DARK_SITE_MANIFEST ?? await defaultManifest();
 const OUTPUT_PATH = process.env.SEMANTIC_DARK_OUTPUT ?? path.join(DATA_ROOT, 'metrics', 'site-observations.v1.jsonl');
 const CAPTURE_ROOT = path.join(DATA_ROOT, 'captures');
 const CHROME_PATH = process.env.CHROME_PATH ?? '/usr/bin/chromium';
@@ -19,6 +25,8 @@ const NAV_WAIT_UNTIL = process.env.SEMANTIC_DARK_NAV_WAIT_UNTIL ?? 'commit';
 const SETTLE_MS = Number(process.env.SEMANTIC_DARK_SETTLE_MS ?? 2_500);
 const MAX_SITES = Number(process.env.SEMANTIC_DARK_MAX_SITES ?? 0);
 const START_INDEX = Number(process.env.SEMANTIC_DARK_START_INDEX ?? 0);
+const RESUME = process.env.SEMANTIC_DARK_RESUME !== '0';
+const DISMISS_BANNERS = process.env.SEMANTIC_DARK_DISMISS_BANNERS !== '0';
 const extensionDir = path.join(ROOT, 'dist');
 const markerSelector = [
   '[data-semantic-dark-active]',
@@ -52,11 +60,61 @@ function safeSlug(value) {
   return value.replace(/[^a-z0-9-]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
 }
 
+async function defaultManifest() {
+  try {
+    await access(DEFAULT_V3_MANIFEST);
+    return DEFAULT_V3_MANIFEST;
+  } catch {
+    return DEFAULT_V2_MANIFEST;
+  }
+}
+
+async function loadExistingObservations(outputPath) {
+  if (!RESUME) return [];
+  try {
+    const text = await readFile(outputPath, 'utf8');
+    return text.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  } catch {
+    return [];
+  }
+}
+
+function observedThemeProfile(row) {
+  if (!row.content_eligible || !row.light_baseline || !row.dark_baseline) return 'unavailable';
+  const light = row.light_baseline.authored_dark_like;
+  const dark = row.dark_baseline.authored_dark_like;
+  if (light === false && dark === false) return 'light-stable';
+  if (light === false && dark === true) return 'system-dark-or-mixed';
+  if (light === true && dark === true) return 'author-dark-static';
+  if (light === true && dark === false) return 'system-light-or-ambiguous';
+  return 'unknown';
+}
+
 async function waitSettled(page) {
+  await page.waitForLoadState('domcontentloaded', {timeout: Math.min(TIMEOUT, 8_000)}).catch(() => undefined);
   await page.waitForTimeout(SETTLE_MS);
   await page.evaluate(() => new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   })).catch(() => undefined);
+}
+
+async function dismissConsentBanners(page) {
+  if (!DISMISS_BANNERS) return;
+  const clicked = await page.evaluate((labels) => {
+    const wanted = new Set(labels);
+    const nodes = [...document.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]')];
+    for (const node of nodes) {
+      const text = `${node.getAttribute('aria-label') ?? ''} ${node.textContent ?? ''} ${node.value ?? ''}`
+        .replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!wanted.has(text)) continue;
+      if (node instanceof HTMLElement) {
+        node.click();
+        return text;
+      }
+    }
+    return null;
+  }, CONSENT_BUTTON_LABELS).catch(() => null);
+  if (clicked) await page.waitForTimeout(400);
 }
 
 async function screenshotWithHash(page, outputPath) {
@@ -220,7 +278,12 @@ async function inspectPage(page, extensionMode, expectedLayer) {
 }
 
 async function createBaselinePage(browser, url) {
-  const context = await browser.newContext({viewport: VIEWPORT, ignoreHTTPSErrors: true, serviceWorkers: 'allow'});
+  const context = await browser.newContext({
+    viewport: VIEWPORT,
+    ignoreHTTPSErrors: true,
+    serviceWorkers: 'allow',
+    userAgent: CROSS_SITE_BROWSER_UA,
+  });
   const page = await context.newPage();
   const consoleErrors = [];
   const pageErrors = [];
@@ -231,6 +294,7 @@ async function createBaselinePage(browser, url) {
   try {
     response = await page.goto(url, {waitUntil: NAV_WAIT_UNTIL, timeout: TIMEOUT});
     await waitSettled(page);
+    await dismissConsentBanners(page);
   } catch (error) {
     navigationError = error instanceof Error ? error.message : String(error);
   }
@@ -246,6 +310,7 @@ async function createExtensionSession(profilePath, url) {
     viewport: VIEWPORT,
     colorScheme: 'dark',
     ignoreHTTPSErrors: true,
+    userAgent: CROSS_SITE_BROWSER_UA,
     args: [
       '--disable-features=DisableLoadExtensionCommandLineSwitch,DisableDisableExtensionsExceptCommandLineSwitch',
       `--disable-extensions-except=${extensionDir}`,
@@ -260,6 +325,7 @@ async function createExtensionSession(profilePath, url) {
   try {
     response = await page.goto(url, {waitUntil: NAV_WAIT_UNTIL, timeout: TIMEOUT});
     await waitSettled(page);
+    await dismissConsentBanners(page);
   } catch (error) {
     navigationError = error instanceof Error ? error.message : String(error);
   }
@@ -334,6 +400,7 @@ async function collectSite(site, index, total) {
       );
       result.dark_activation = Boolean(result.automatic_dark.active);
       result.algorithm_noop = !result.dark_activation;
+      result.observed_theme_profile = observedThemeProfile(result);
       result.expected_activation = site.expected_layer === 'light-only' ? true : site.expected_layer === 'native-dark' ? false : null;
       result.activation_match = result.expected_activation === null ? null : result.dark_activation === result.expected_activation;
       result.native_dark_decision = site.expected_layer === 'native-dark' ? result.algorithm_noop : null;
@@ -360,11 +427,18 @@ async function main() {
     : allSites.slice(START_INDEX);
   await mkdir(path.dirname(OUTPUT_PATH), {recursive: true});
   await mkdir(CAPTURE_ROOT, {recursive: true});
-  const output = [];
+  const output = await loadExistingObservations(OUTPUT_PATH);
+  const collected = new Set(output.map((row) => row.site_id));
   for (let i = 0; i < sites.length; i++) {
-    const observation = await collectSite(sites[i], START_INDEX + i + 1, allSites.length);
+    const site = sites[i];
+    if (collected.has(site.id)) {
+      console.log(`[${START_INDEX + i + 1}/${allSites.length}] skip ${site.id} (resume)`);
+      continue;
+    }
+    const observation = await collectSite(site, START_INDEX + i + 1, allSites.length);
     output.push(observation);
-    await writeFile(OUTPUT_PATH, output.map((row) => JSON.stringify(row)).join('\n') + '\n');
+    collected.add(site.id);
+    await writeFile(OUTPUT_PATH, `${output.map((row) => JSON.stringify(row)).join('\n')}\n`);
     await new Promise((resolve) => setTimeout(resolve, 750));
   }
   const summary = {
@@ -390,6 +464,7 @@ async function main() {
       split: row.split,
       access_risk: row.access_risk,
       expected_layer: row.expected_layer,
+      observed_theme_profile: row.observed_theme_profile ?? null,
       observed_authored_dark_like: row.dark_baseline?.authored_dark_like ?? null,
       dark_activation: row.dark_activation ?? null,
       algorithm_noop: row.algorithm_noop ?? null,

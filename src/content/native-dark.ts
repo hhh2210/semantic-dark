@@ -7,9 +7,28 @@ import {
   type SrgbColor,
 } from '../color/index';
 import {AuthoredThemeObserver} from './authored-theme-observer';
+import {
+  DARK_LUMINANCE,
+  LIGHT_LUMINANCE,
+  backgroundImageBlocksSample,
+  canvasLooksLight,
+  classifyNativeTheme,
+  isLikelyViewportOverlay,
+  type NativeThemeDecision,
+  type NativeThemeEvidence,
+  type NativeThemeKind,
+} from './native-theme-evidence';
 
-const DARK_LUMINANCE = 0.18;
-const LIGHT_LUMINANCE = 0.55;
+export {
+  classifyNativeTheme,
+  backgroundImageBlocksSample,
+  canvasLooksLight,
+  isLikelyViewportOverlay,
+  type NativeThemeDecision,
+  type NativeThemeEvidence,
+  type NativeThemeKind,
+};
+
 const GRID = [0.1, 0.5, 0.9] as const;
 const MEDIA_SELECTOR = 'img,video,canvas,svg,iframe,object,embed';
 const DARK_CLASSES = new Set(['dark', 'dark-mode', 'theme-dark', 'is-dark']);
@@ -22,65 +41,11 @@ const THEME_ATTRIBUTES = [
   'data-dark-mode',
 ] as const;
 
-export type NativeThemeKind = 'native-dark' | 'light' | 'ambiguous' | 'forced-colors';
-
-export interface NativeThemeEvidence {
-  forcedColors: boolean;
-  negotiatedDark: boolean;
-  declaredLight: boolean;
-  lightCanvas: boolean;
-  visibleContent: boolean;
-  rootDarkMarker: boolean;
-  knownSamples: number;
-  darkCoverage: number;
-  lightCoverage: number;
-  lightOnDarkCoherence: number;
-  darkOnLightCoherence: number;
-}
-
-export interface NativeThemeDecision {
-  kind: NativeThemeKind;
-  reason: string;
-  evidence: NativeThemeEvidence;
-}
-
 export interface NativeThemeDetectorLike {
   prefersDark(): boolean;
   sample(): NativeThemeDecision;
   start(onChange: () => void): void;
   stop(): void;
-}
-
-export function classifyNativeTheme(evidence: NativeThemeEvidence): NativeThemeDecision {
-  const strongDark = evidence.knownSamples >= 5 && (
-    (evidence.darkCoverage >= 0.65 && evidence.lightOnDarkCoherence >= 0.55) ||
-    evidence.darkCoverage >= 0.78
-  );
-  const strongLight = evidence.visibleContent && evidence.knownSamples >= 4 &&
-    evidence.lightCoverage >= 0.7 &&
-    evidence.darkCoverage <= 0.2 &&
-    evidence.darkOnLightCoherence >= 0.55;
-  const explicitLight = evidence.visibleContent && evidence.declaredLight && evidence.lightCanvas &&
-    !evidence.negotiatedDark && !evidence.rootDarkMarker &&
-    (evidence.knownSamples === 0 || (
-      evidence.lightCoverage >= 0.5 && evidence.darkCoverage < 0.4
-    ));
-
-  if (evidence.forcedColors) return decision('forced-colors', 'forced-colors-active', evidence);
-  if (strongDark) return decision('native-dark', 'dark-rendered-surfaces', evidence);
-  if (evidence.rootDarkMarker) {
-    return strongLight
-      ? decision('ambiguous', 'dark-marker-conflicts-with-light-rendering', evidence)
-      : decision('native-dark', 'active-root-dark-marker', evidence);
-  }
-  if (evidence.negotiatedDark && !strongLight && (
-    evidence.darkCoverage >= 0.4 || evidence.knownSamples === 0
-  )) {
-    return decision('native-dark', 'dark-color-scheme-without-light-conflict', evidence);
-  }
-  if (strongLight) return decision('light', 'light-rendered-surfaces', evidence);
-  if (explicitLight) return decision('light', 'explicit-light-scheme', evidence);
-  return decision('ambiguous', 'insufficient-stable-theme-evidence', evidence);
 }
 
 export class NativeDarkDetector implements NativeThemeDetectorLike {
@@ -109,7 +74,7 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
       negotiatedDark,
       ...visual,
       declaredLight,
-      lightCanvas: hasLightCanvas(),
+      lightCanvas: hasLightCanvas(negotiatedDark),
       visibleContent: hasVisibleContent(),
       rootDarkMarker: hasRootDarkMarker(),
     });
@@ -142,14 +107,6 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
   }
 }
 
-function decision(
-  kind: NativeThemeKind,
-  reason: string,
-  evidence: NativeThemeEvidence,
-): NativeThemeDecision {
-  return {kind, reason, evidence};
-}
-
 function sampleViewport(negotiatedDark: boolean): Omit<NativeThemeEvidence,
   'forcedColors' | 'negotiatedDark' | 'declaredLight' | 'lightCanvas' | 'visibleContent' | 'rootDarkMarker'> {
   const width = Math.max(document.documentElement.clientWidth, window.innerWidth);
@@ -164,8 +121,8 @@ function sampleViewport(negotiatedDark: boolean): Omit<NativeThemeEvidence,
   if (width > 0 && height > 0 && typeof document.elementsFromPoint === 'function') {
     for (const xRatio of GRID) for (const yRatio of GRID) {
       const element = document.elementsFromPoint(width * xRatio, height * yRatio)
-        .find((candidate) => !isExtensionElement(candidate));
-      if (!element || element.closest(MEDIA_SELECTOR)) continue;
+        .find((candidate) => isSampleableThemeElement(candidate, width, height));
+      if (!element) continue;
       const sample = sampleElement(element, canvas);
       if (!sample) continue;
       known += 1;
@@ -192,6 +149,26 @@ function sampleViewport(negotiatedDark: boolean): Omit<NativeThemeEvidence,
   };
 }
 
+function isSampleableThemeElement(
+  element: Element,
+  viewportWidth: number,
+  viewportHeight: number,
+): boolean {
+  if (isExtensionElement(element) || element.closest(MEDIA_SELECTOR)) return false;
+  const style = getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
+  return !isLikelyViewportOverlay({
+    width: rect.width,
+    height: rect.height,
+    viewportWidth,
+    viewportHeight,
+    position: style.position,
+    zIndex: style.zIndex,
+    role: element.getAttribute('role'),
+    tagName: element.tagName,
+  });
+}
+
 function sampleElement(element: Element, canvas: SrgbColor): {
   background: SrgbColor;
   foreground: SrgbColor;
@@ -200,7 +177,7 @@ function sampleElement(element: Element, canvas: SrgbColor): {
   let current: Element | null = element;
   while (current) {
     const style = getComputedStyle(current);
-    if (style.backgroundImage !== 'none') return null;
+    if (backgroundImageBlocksSample(style.backgroundImage)) return null;
     const color = parseCssColor(style.backgroundColor);
     if (color && color.a > 0) layers.push(color);
     current = current.parentElement;
@@ -227,13 +204,12 @@ function hasVisibleContent(): boolean {
   return false;
 }
 
-function hasLightCanvas(): boolean {
-  for (const element of [document.body, document.documentElement]) {
-    if (!element) continue;
-    const color = parseCssColor(getComputedStyle(element).backgroundColor);
-    if (color && color.a >= 0.9) return relativeLuminance(color) >= LIGHT_LUMINANCE;
-  }
-  return false;
+function hasLightCanvas(negotiatedDark: boolean): boolean {
+  const paint = (element: Element | null): SrgbColor | null => {
+    if (!element) return null;
+    return parseCssColor(getComputedStyle(element).backgroundColor);
+  };
+  return canvasLooksLight(paint(document.body), paint(document.documentElement), negotiatedDark);
 }
 
 function selectedSchemeIsDark(prefersDark: boolean): boolean {
