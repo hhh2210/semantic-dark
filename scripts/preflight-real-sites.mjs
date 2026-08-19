@@ -1,7 +1,12 @@
+import {existsSync} from 'node:fs';
 import {readFile, writeFile} from 'node:fs/promises';
+import path from 'node:path';
+import {CROSS_SITE_BROWSER_UA, DEFAULT_V2_MANIFEST, DEFAULT_V3_MANIFEST} from './cross-site-policy.mjs';
 
-const manifestPath = process.argv[2] ?? '/home/ubuntu/scratch-data/semantic-dark-cross-site/sites-expanded.v1.json';
-const outputPath = process.argv[3] ?? '/home/ubuntu/scratch-data/semantic-dark-cross-site/preflight-expanded.v1.json';
+const manifestPath = process.argv[2]
+  ?? process.env.SEMANTIC_DARK_SITE_MANIFEST
+  ?? (existsSync(DEFAULT_V3_MANIFEST) ? DEFAULT_V3_MANIFEST : DEFAULT_V2_MANIFEST);
+const outputPath = process.argv[3] ?? path.join(process.env.HOME ?? '/home/ubuntu', 'scratch-data/semantic-dark-cross-site/preflight-expanded.v1.json');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 const sites = manifest.sites ?? [];
 const concurrency = 8;
@@ -14,9 +19,15 @@ async function check(site) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const started = Date.now();
   try {
-    let response = await fetch(site.url, {method: 'HEAD', redirect: 'follow', signal: controller.signal, headers: {'user-agent': 'semantic-dark-benchmark-preflight/1.0'}});
-    if (response.status === 405 || response.status === 403 || response.status === 429) {
-      response = await fetch(site.url, {method: 'GET', redirect: 'follow', signal: controller.signal, headers: {'user-agent': 'semantic-dark-benchmark-preflight/1.0', accept: 'text/html'}});
+    let response = await fetch(site.url, {method: 'HEAD', redirect: 'follow', signal: controller.signal, headers: {
+      'user-agent': CROSS_SITE_BROWSER_UA,
+      accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+    }});
+    if (response.status === 405 || response.status === 403 || response.status === 401 || response.status === 429) {
+      response = await fetch(site.url, {method: 'GET', redirect: 'follow', signal: controller.signal, headers: {
+        'user-agent': CROSS_SITE_BROWSER_UA,
+        accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+      }});
     }
     return {
       ...site,
