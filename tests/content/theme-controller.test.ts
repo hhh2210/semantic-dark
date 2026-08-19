@@ -4,17 +4,18 @@ import type {
   NativeThemeDetectorLike,
   NativeThemeKind,
 } from '../../src/content/native-dark';
+import type {OfficialThemeLaneLike, OfficialThemeProbe} from '../../src/content/official-theme';
 import {
   ThemeController,
   type ThemeEngineLike,
 } from '../../src/content/theme-controller';
 import {DEFAULT_THEME, type ThemeConfig, type ThemeMode} from '../../src/types';
 
-const EVIDENCE = {
+const LIGHT_EVIDENCE = {
   forcedColors: false,
   negotiatedDark: false,
   declaredLight: false,
-  lightCanvas: false,
+  lightCanvas: true,
   visibleContent: true,
   rootDarkMarker: false,
   knownSamples: 9,
@@ -24,8 +25,28 @@ const EVIDENCE = {
   darkOnLightCoherence: 1,
 };
 
+const DARK_EVIDENCE = {
+  ...LIGHT_EVIDENCE,
+  lightCanvas: false,
+  darkCoverage: 0.86,
+  lightCoverage: 0,
+  lightOnDarkCoherence: 0.8,
+  darkOnLightCoherence: 0,
+};
+
 function result(kind: NativeThemeKind): NativeThemeDecision {
-  return {kind, reason: `fixture-${kind}`, evidence: EVIDENCE};
+  if (kind === 'native-dark') {
+    return {kind, reason: 'dark-rendered-surfaces', evidence: DARK_EVIDENCE};
+  }
+  return {kind, reason: `fixture-${kind}`, evidence: LIGHT_EVIDENCE};
+}
+
+function markerOnlyNativeDark(): NativeThemeDecision {
+  return {
+    kind: 'native-dark',
+    reason: 'active-root-dark-marker',
+    evidence: LIGHT_EVIDENCE,
+  };
 }
 
 class FakeDetector implements NativeThemeDetectorLike {
@@ -53,6 +74,37 @@ class FakeDetector implements NativeThemeDetectorLike {
   }
 }
 
+class FakeOfficial implements OfficialThemeLaneLike {
+  applied = false;
+  activateResult = true;
+  restores = 0;
+  activates = 0;
+
+  probe(): OfficialThemeProbe {
+    return {
+      capable: this.activateResult,
+      source: this.activateResult ? 'catalog' : 'none',
+      catalogId: this.activateResult ? 'zhihu' : null,
+      recipes: [],
+    };
+  }
+
+  activate(): boolean {
+    this.activates += 1;
+    this.applied = this.activateResult;
+    return this.activateResult;
+  }
+
+  restore(): void {
+    this.restores += 1;
+    this.applied = false;
+  }
+
+  isApplied(): boolean {
+    return this.applied;
+  }
+}
+
 class FakeEngine implements ThemeEngineLike {
   readonly enabled: boolean[] = [];
   update(config: ThemeConfig): void { this.enabled.push(config.enabled); }
@@ -62,7 +114,18 @@ function config(mode: ThemeMode): ThemeConfig {
   return {...DEFAULT_THEME, mode, enabled: mode !== 'off'};
 }
 
-function harness(mode: ThemeMode, detector: FakeDetector, settle = async (): Promise<void> => {}) {
+function inertOfficial(): FakeOfficial {
+  const lane = new FakeOfficial();
+  lane.activateResult = false;
+  return lane;
+}
+
+function harness(
+  mode: ThemeMode,
+  detector: FakeDetector,
+  settle = async (): Promise<void> => {},
+  official: FakeOfficial = inertOfficial(),
+) {
   const dom = new FakeEngine();
   const svg = new FakeEngine();
   const image = new FakeEngine();
@@ -70,8 +133,9 @@ function harness(mode: ThemeMode, detector: FakeDetector, settle = async (): Pro
     settle,
     stableDelay: async () => {},
     debounceMs: 0,
+    officialTheme: official,
   });
-  return {controller, dom, svg, image};
+  return {controller, dom, svg, image, official};
 }
 
 afterEach(() => {
@@ -196,5 +260,91 @@ describe('ThemeController', () => {
       decision: 'user-off',
     });
     expect(state.dom.enabled).toEqual([]);
+  });
+
+  it('prefers a reversible official dark switch over the Semantic Dark transform', async () => {
+    const official = new FakeOfficial();
+    const state = harness(
+      'auto',
+      new FakeDetector(result('light'), result('light'), result('native-dark')),
+      async () => {},
+      official,
+    );
+    await state.controller.start();
+
+    expect(state.controller.getStatus()).toMatchObject({
+      effectiveEnabled: false,
+      decision: 'official-dark',
+      reason: 'official-theme-activated',
+    });
+    expect(official.activates).toBe(1);
+    expect(official.applied).toBe(true);
+    expect(state.dom.enabled).toEqual([]);
+    expect(document.documentElement.hasAttribute('data-semantic-dark-active')).toBe(false);
+  });
+
+  it('falls back to the transform when official activation does not darken the page', async () => {
+    const official = new FakeOfficial();
+    const state = harness(
+      'auto',
+      new FakeDetector(result('light'), result('light'), result('light')),
+      async () => {},
+      official,
+    );
+    await state.controller.start();
+
+    expect(state.controller.getStatus().decision).toBe('applied-light');
+    expect(official.activates).toBe(1);
+    expect(official.restores).toBeGreaterThanOrEqual(1);
+    expect(official.applied).toBe(false);
+    expect(state.dom.enabled).toEqual([true]);
+  });
+
+  it('restores an official theme mutation when the system returns to light', async () => {
+    const official = new FakeOfficial();
+    const detector = new FakeDetector(result('light'), result('light'), result('native-dark'));
+    detector.setSystemDark(true);
+    const state = harness('auto', detector, async () => {}, official);
+    await state.controller.start();
+    expect(state.controller.getStatus().decision).toBe('official-dark');
+
+    detector.setSystemDark(false);
+    expect(state.controller.getStatus().decision).toBe('system-light');
+    expect(official.applied).toBe(false);
+    expect(official.restores).toBeGreaterThanOrEqual(1);
+  });
+
+  it('restores official theme before a manual force-on override', async () => {
+    const official = new FakeOfficial();
+    const state = harness(
+      'auto',
+      new FakeDetector(result('light'), result('light'), result('native-dark')),
+      async () => {},
+      official,
+    );
+    await state.controller.start();
+    await state.controller.update(config('on'));
+
+    expect(official.applied).toBe(false);
+    expect(state.controller.getStatus()).toMatchObject({
+      effectiveEnabled: true,
+      decision: 'user-on',
+    });
+    expect(state.dom.enabled).toEqual([true]);
+  });
+
+  it('does not keep an official marker that failed to visually darken the page', async () => {
+    const official = new FakeOfficial();
+    const state = harness(
+      'auto',
+      new FakeDetector(result('light'), result('light'), markerOnlyNativeDark()),
+      async () => {},
+      official,
+    );
+    await state.controller.start();
+
+    expect(state.controller.getStatus().decision).toBe('applied-light');
+    expect(official.applied).toBe(false);
+    expect(state.dom.enabled).toEqual([true]);
   });
 });

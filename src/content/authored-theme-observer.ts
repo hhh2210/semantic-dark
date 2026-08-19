@@ -1,11 +1,5 @@
-const THEME_ATTRIBUTES = [
-  'data-theme',
-  'data-bs-theme',
-  'data-color-mode',
-  'data-color-theme',
-  'data-mode',
-  'data-dark-mode',
-] as const;
+import {THEME_ATTRIBUTES} from './theme-markers';
+
 const ROOT_THEME_ATTRIBUTES = ['class', 'style', ...THEME_ATTRIBUTES] as const;
 const HEAD_THEME_ATTRIBUTES = [
   'class', 'content', 'disabled', 'href', 'media', 'name', 'rel', 'style',
@@ -22,6 +16,7 @@ export class AuthoredThemeObserver {
   private observedRoot: HTMLElement | null = null;
   private observedHead: HTMLHeadElement | null = null;
   private observedBody: HTMLElement | null = null;
+  private suspended = false;
 
   constructor(private readonly onChange: () => void) {}
 
@@ -43,12 +38,30 @@ export class AuthoredThemeObserver {
   }
 
   stop(): void {
+    this.suspended = false;
     this.observer?.disconnect();
     this.observer = null;
     this.observedRoot = null;
     this.observedHead = null;
     this.observedBody = null;
     document.removeEventListener('load', this.notifyForLoadedStyle, true);
+  }
+
+  suspend(): void {
+    if (!this.observer || this.suspended) return;
+    this.observer.takeRecords();
+    this.observer.disconnect();
+    this.suspended = true;
+    this.observedRoot = null;
+    this.observedHead = null;
+    this.observedBody = null;
+  }
+
+  resume(): void {
+    if (!this.observer || !this.suspended) return;
+    this.suspended = false;
+    this.observer.observe(document, {childList: true, subtree: true});
+    this.observeThemeContainers();
   }
 
   private observeThemeContainers(): void {
