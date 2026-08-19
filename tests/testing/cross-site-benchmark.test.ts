@@ -57,10 +57,14 @@ describe('cross-site v3 supplement', () => {
     expect(merged.site_count).toBe(manifestLengthPlusNew());
   });
 
-  it('does not apply proposed label reviews during merge', async () => {
+  it('applies only independently verified label reviews during merge', async () => {
     const merged = await mergeCrossSiteSupplement(V2, SUPPLEMENT);
-    expect(merged.sites.find((site) => site.id === 'light-python')?.expected_layer).toBe('light-only');
-    expect(merged.sites.find((site) => site.id === 'light-python')?.label_status).toBe('prior');
+    const python = merged.sites.find((site) => site.id === 'light-python');
+    const aws = merged.sites.find((site) => site.id === 'aws-documentation');
+    expect(python?.expected_layer).toBe('light-only');
+    expect(python?.label_status).toBe('reviewed');
+    expect(aws?.expected_layer).toBe('dynamic-mixed');
+    expect(aws?.label_status).toBe('reviewed');
   });
 
   it('keeps the checked-in v3 manifest identical to a fresh merge', async () => {

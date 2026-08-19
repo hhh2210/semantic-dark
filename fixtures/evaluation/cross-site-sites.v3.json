@@ -256,8 +256,8 @@
       "source": "legacy-sentinel",
       "host": "python.org",
       "split": "sentinel",
-      "quality_core": true,
-      "label_status": "prior"
+      "label_status": "reviewed",
+      "quality_core": true
     },
     {
       "id": "light-pypi",
@@ -653,7 +653,7 @@
     {
       "id": "aws-documentation",
       "url": "https://docs.aws.amazon.com/",
-      "expected_layer": "light-only",
+      "expected_layer": "dynamic-mixed",
       "family": "amazon-aws",
       "site_family": "amazon-aws",
       "page_type": "docs",
@@ -670,8 +670,8 @@
       "source": "researched-candidate",
       "host": "docs.aws.amazon.com",
       "split": "core",
-      "quality_core": false,
-      "label_status": "prior"
+      "label_status": "reviewed",
+      "quality_core": false
     },
     {
       "id": "go-docs",
@@ -1033,8 +1033,8 @@
       "source": "researched-candidate",
       "host": "cloud.google.com",
       "split": "core",
-      "quality_core": false,
-      "label_status": "prior"
+      "label_status": "reviewed",
+      "quality_core": false
     },
     {
       "id": "gitlab",
@@ -2444,7 +2444,7 @@
     {
       "id": "threejs",
       "url": "https://threejs.org/",
-      "expected_layer": "light-only",
+      "expected_layer": "dynamic-mixed",
       "family": "threejs",
       "site_family": "threejs",
       "page_type": "education",
@@ -2460,8 +2460,8 @@
       "source": "researched-candidate",
       "host": "threejs.org",
       "split": "held-out",
-      "quality_core": false,
-      "label_status": "prior"
+      "label_status": "reviewed",
+      "quality_core": false
     },
     {
       "id": "pexels",

@@ -14,29 +14,29 @@
     {
       "id": "light-python",
       "from": "light-only",
-      "to": "dynamic-mixed",
-      "status": "proposed",
+      "to": "light-only",
+      "status": "applied",
       "reason": "Pilot already notes a dark banner plus light body, code, and images. Coverage must not require automatic activation."
     },
     {
       "id": "aws-documentation",
       "from": "light-only",
       "to": "dynamic-mixed",
-      "status": "proposed",
+      "status": "applied",
       "reason": "AWS docs follow system appearance on many routes. Measure light/dark baselines before scoring as light-stable."
     },
     {
       "id": "threejs",
       "from": "light-only",
       "to": "dynamic-mixed",
-      "status": "proposed",
+      "status": "applied",
       "reason": "Marketing/docs hybrid with WebGL hero; likely mixed or native-dark depending on route."
     },
     {
       "id": "looker",
       "from": "light-only",
-      "to": "dynamic-mixed",
-      "status": "proposed",
+      "to": "light-only",
+      "status": "applied",
       "reason": "Cloud product page, not a stable document canvas; high chance of system-dark or auth wall."
     }
   ],

@@ -105,7 +105,23 @@ pnpm benchmark:real-sites
 pnpm benchmark:quality <observations.jsonl> $PWD/fixtures/evaluation/cross-site-sites.v3.json
 ```
 
-Proposed label reviews in the supplement stay `proposed` until a measured run confirms them. Collection and cleaning follow-ups live in [MANUS-BENCHMARK-HANDOFF.md](MANUS-BENCHMARK-HANDOFF.md).
+Four label reviews were measured in two independent runs before being applied: `light-python` remains `light-only`, `aws-documentation` and `threejs` become `dynamic-mixed`, and `looker` remains `light-only`. Collection and cleaning follow-ups live in [MANUS-BENCHMARK-HANDOFF.md](MANUS-BENCHMARK-HANDOFF.md).
+
+## First v3 run
+
+The first v3 browser run contains one JSONL row for each of the 169 manifest records. It loaded 150/169 pages (88.76%); the 42-site quality-core subset loaded 40/42 pages (95.24%), and all 15 v3 supplement sites passed preflight. The panels below are intentionally independent; no weighted total score is introduced.
+
+| Panel | Metric | v3 result | Gate status |
+|---|---|---:|---|
+| Safety | `nativeDarkSafety.falseActivations` | `[lottiefiles]` | **FAIL**; any non-empty list is a veto |
+| Coverage | `measuredLightStable.active / denominator` | `64 / 108` (59.26%) | Descriptive result; higher than v2's `4 / 114` activation count, but not a safety pass |
+| Reliability | browser exclusions + restore failures | `19` exclusions; `10` restore failures | Incomplete/review required; all IDs and causes retained |
+
+The v3 run's native-dark false activation is `lottiefiles`. One independent repeat captured it as `light-stable` with `native_dark_decision: true` and no extension errors; a second repeat was not browser-loaded and is therefore insufficient to relabel the safety sentinel. The correct action is to retain the safety veto and diagnose the page/label, not to relax the detector threshold or remove the sentinel. The measured coverage denominator is `light-stable`, while `priorLightOnly` remains an audit-only column.
+
+### v3 preflight and exclusions
+
+The resolved v3 manifest has 169 sites, with 150 preflight successes and 19 exclusions. The 15 `v3-supplement` sites all passed preflight. The exclusions remain explicit, including 401/403 responses, timeouts, connection closures and the existing `cppreference` 403; no blocked URL was retried by changing its path or bypassing access controls.
 
 ## References
 
