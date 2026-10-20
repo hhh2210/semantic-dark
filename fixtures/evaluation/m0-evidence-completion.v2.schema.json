@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hhh2210/semantic-dark/fixtures/evaluation/m0-evidence-completion.v2.schema.json",
+  "title": "Semantic Dark M0-v2 command completion",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "id", "command", "startedAt", "completedAt", "argv", "cwd",
+    "env", "tools", "runtime", "git", "outcome", "log"
+  ],
+  "properties": {
+    "schema": {"const": "semantic-dark.m0-evidence-completion.v2"},
+    "id": {"$ref": "#/$defs/logId"},
+    "command": {"enum": ["pnpm verify", "pnpm e2e"]},
+    "startedAt": {"$ref": "#/$defs/timestamp"},
+    "completedAt": {"$ref": "#/$defs/timestamp"},
+    "argv": {
+      "type": "array",
+      "prefixItems": [{"type": "string", "minLength": 1}, {"enum": ["verify", "e2e"]}],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "cwd": {"type": "string", "pattern": "^/"},
+    "env": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "HOME", "PATH", "TMPDIR", "CI", "FORCE_COLOR", "LANG", "LC_ALL",
+        "TZ", "CHROME_PATH"
+      ],
+      "properties": {
+        "HOME": {"type": "string", "minLength": 1},
+        "PATH": {"type": "string", "minLength": 1},
+        "TMPDIR": {"type": "string", "minLength": 1},
+        "CI": {"const": "1"},
+        "FORCE_COLOR": {"const": "0"},
+        "LANG": {"const": "en_US.UTF-8"},
+        "LC_ALL": {"const": "en_US.UTF-8"},
+        "TZ": {"const": "UTC"},
+        "CHROME_PATH": {"type": ["string", "null"], "pattern": "^/"}
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "pnpm", "git", "chrome"],
+      "properties": {
+        "node": {"$ref": "#/$defs/tool"},
+        "pnpm": {"$ref": "#/$defs/tool"},
+        "git": {"$ref": "#/$defs/tool"},
+        "chrome": {"oneOf": [{"$ref": "#/$defs/tool"}, {"type": "null"}]}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "architecture", "osRelease"],
+      "properties": {
+        "platform": {"type": "string", "minLength": 1},
+        "architecture": {"type": "string", "minLength": 1},
+        "osRelease": {"type": "string", "minLength": 1}
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["head", "tree", "cleanBefore", "cleanAfter"],
+      "properties": {
+        "head": {"$ref": "#/$defs/sha1"},
+        "tree": {"$ref": "#/$defs/sha1"},
+        "cleanBefore": {"type": "boolean"},
+        "cleanAfter": {"type": "boolean"}
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exitCode", "signal", "status"],
+      "properties": {
+        "exitCode": {"type": ["integer", "null"], "minimum": 0},
+        "signal": {"type": ["string", "null"], "minLength": 1},
+        "status": {"enum": ["passed", "failed"]}
+      }
+    },
+    "log": {"$ref": "#/$defs/artifact"}
+  },
+  "allOf": [
+    {
+      "if": {"type": "object", "properties": {"command": {"const": "pnpm verify"}}, "required": ["command"]},
+      "then": {
+        "type": "object",
+        "properties": {
+          "argv": {"type": "array", "prefixItems": [{}, {"const": "verify"}], "minItems": 2, "maxItems": 2},
+          "env": {"type": "object", "properties": {"CHROME_PATH": {"type": "null"}}},
+          "tools": {"type": "object", "properties": {"chrome": {"type": "null"}}}
+        }
+      }
+    },
+    {
+      "if": {"type": "object", "properties": {"command": {"const": "pnpm e2e"}}, "required": ["command"]},
+      "then": {
+        "type": "object",
+        "properties": {
+          "argv": {"type": "array", "prefixItems": [{}, {"const": "e2e"}], "minItems": 2, "maxItems": 2},
+          "env": {"type": "object", "properties": {"CHROME_PATH": {"type": "string"}}},
+          "tools": {"type": "object", "properties": {"chrome": {"$ref": "#/$defs/tool"}}}
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "object",
+            "properties": {"status": {"const": "passed"}},
+            "required": ["status"]
+          }
+        },
+        "required": ["outcome"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "object",
+            "properties": {"exitCode": {"const": 0}, "signal": {"type": "null"}}
+          },
+          "git": {
+            "type": "object",
+            "properties": {"cleanBefore": {"const": true}, "cleanAfter": {"const": true}}
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha1": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "logId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}Z$"
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "version"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/"},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "byteLength", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/"},
+        "byteLength": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

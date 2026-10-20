@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hhh2210/semantic-dark/fixtures/evaluation/m0-manifest.v2.schema.json",
+  "title": "Semantic Dark M0-v2 baseline manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema", "schema", "id", "status", "recordedAt", "predecessor",
+    "baselineProfile", "commits", "implementationPins", "evidence",
+    "environment", "a3"
+  ],
+  "properties": {
+    "$schema": {"const": "./m0-manifest.v2.schema.json"},
+    "schema": {"const": "semantic-dark.m0-manifest.v2"},
+    "id": {"const": "semantic-dark.m0-v2-baseline"},
+    "status": {"const": "frozen"},
+    "recordedAt": {"$ref": "#/$defs/timestamp"},
+    "predecessor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "path", "sha256"],
+      "properties": {
+        "schema": {"const": "semantic-dark.m0-manifest.v1"},
+        "path": {"const": "fixtures/evaluation/m0-manifest.v1.json"},
+        "sha256": {"const": "69efa054f742c58b7c69e6d64bca51e04e67ef730ac67ac980a3ddff854bb205"}
+      }
+    },
+    "baselineProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "fileSha256", "semanticSha256"],
+      "properties": {
+        "path": {"const": "fixtures/profiles/baseline-profile.v2.json"},
+        "fileSha256": {"const": "0b7e66c6bc2281e3387fe5a9df6d57a62fcecb5f7948d39e224f99850d105f5f"},
+        "semanticSha256": {"const": "e6fd84a659b23272bfac8049abf7f5711b96abff793029340fdc942313fe6cb5"}
+      }
+    },
+    "commits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engineIntervention", "evaluator"],
+      "properties": {
+        "engineIntervention": {"const": "6952eab475b6deb45e5558e0c1e764154f42a916"},
+        "evaluator": {"$ref": "#/$defs/sha1"}
+      }
+    },
+    "implementationPins": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evaluatorTreeSha1", "pinSetSha256", "files"],
+      "properties": {
+        "evaluatorTreeSha1": {"$ref": "#/$defs/sha1"},
+        "pinSetSha256": {"$ref": "#/$defs/sha256"},
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/implementationPin"}
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verify", "e2e"],
+      "properties": {
+        "verify": {"$ref": "#/$defs/verifyEvidence"},
+        "e2e": {"$ref": "#/$defs/e2eEvidence"}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform", "architecture", "osRelease", "nodeVersion", "pnpmVersion",
+        "chromeVersion", "headless", "locale", "colorProfile", "renderViewport",
+        "a3ProbeViewport"
+      ],
+      "properties": {
+        "platform": {"type": "string", "minLength": 1},
+        "architecture": {"type": "string", "minLength": 1},
+        "osRelease": {"type": "string", "minLength": 1},
+        "nodeVersion": {"type": "string", "minLength": 1},
+        "pnpmVersion": {"type": "string", "minLength": 1},
+        "chromeVersion": {"type": "string", "minLength": 1},
+        "headless": {"const": true},
+        "locale": {"const": "en-US"},
+        "colorProfile": {"const": "srgb"},
+        "renderViewport": {"$ref": "#/$defs/renderViewport"},
+        "a3ProbeViewport": {"$ref": "#/$defs/a3Viewport"}
+      }
+    },
+    "a3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caseId", "stages", "diagnosis", "correctedRender", "evaluatorTolerance",
+        "artifacts"
+      ],
+      "properties": {
+        "caseId": {"const": "spectrum.surface.card-to-raised.rgba8-boundary"},
+        "stages": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mapperInMemory", "cssSerialized", "chromeComputedStyle",
+            "afterBackdropCompositing"
+          ],
+          "properties": {
+            "mapperInMemory": {"const": 1.120999900000913},
+            "cssSerialized": {"const": 1.1209998518368234},
+            "chromeComputedStyle": {"const": 1.1199500334856427},
+            "afterBackdropCompositing": {"const": 1.1199500334856427}
+          }
+        },
+        "diagnosis": {"const": "real-rendered-rgba8-shortfall-engine-intervention"},
+        "correctedRender": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["foregroundRgba8", "backdropRgba8", "contrast"],
+          "properties": {
+            "foregroundRgba8": {"const": [42, 41, 41, 255]},
+            "backdropRgba8": {"const": [32, 32, 32, 255]},
+            "contrast": {"const": 1.123181338925729}
+          }
+        },
+        "evaluatorTolerance": {"const": 0},
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "result", "screenshot"],
+          "properties": {
+            "source": {"$ref": "#/$defs/nonEmptyArtifact"},
+            "result": {"$ref": "#/$defs/nonEmptyArtifact"},
+            "screenshot": {"$ref": "#/$defs/nonEmptyArtifact"}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha1": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "logId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}Z$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "byteLength", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/"},
+        "byteLength": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "nonEmptyArtifact": {
+      "allOf": [
+        {"$ref": "#/$defs/artifact"},
+        {"type": "object", "properties": {"byteLength": {"type": "integer", "minimum": 1}}}
+      ]
+    },
+    "implementationPin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "commitRole", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"},
+        "commitRole": {"enum": ["engine", "evaluator"]},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "evidenceBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "command", "completion"],
+      "properties": {
+        "id": {"$ref": "#/$defs/logId"},
+        "command": {"type": "string"},
+        "completion": {"$ref": "#/$defs/nonEmptyArtifact"}
+      }
+    },
+    "verifyEvidence": {
+      "allOf": [
+        {"$ref": "#/$defs/evidenceBase"},
+        {"type": "object", "properties": {"command": {"const": "pnpm verify"}}}
+      ]
+    },
+    "e2eEvidence": {
+      "allOf": [
+        {"$ref": "#/$defs/evidenceBase"},
+        {"type": "object", "properties": {"command": {"const": "pnpm e2e"}}}
+      ]
+    },
+    "renderViewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "deviceScaleFactor"],
+      "properties": {
+        "width": {"const": 1280},
+        "height": {"const": 900},
+        "deviceScaleFactor": {"const": 1}
+      }
+    },
+    "a3Viewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "deviceScaleFactor"],
+      "properties": {
+        "width": {"const": 220},
+        "height": {"const": 100},
+        "deviceScaleFactor": {"const": 1}
+      }
+    }
+  }
+}
