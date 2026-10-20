@@ -3,12 +3,19 @@ import {ImageThemeEngine} from './image-engine';
 import {NativeDarkDetector} from './native-dark';
 import {SvgThemeEngine} from './svg-engine';
 import {ThemeController} from './theme-controller';
+import {observeInsecureMedia} from './upgrade-insecure';
 import {
   normalizeThemeConfig,
   type NormalizedThemeConfig,
   type PageThemeStatus,
   type RuntimeMessage,
 } from '../types';
+
+// Xiaohongshu and similar sites still author `http:` CDN media on HTTPS pages.
+// Chrome auto-upgrades the request, but attributes the Mixed Content warning to
+// whatever content-script stack forced layout (`getComputedStyle` / `decode`).
+// Rewrite the DOM URLs first so engine work never sits on an `http:` load stack.
+observeInsecureMedia(document);
 
 const host = location.host;
 let controller: ThemeController | null = null;

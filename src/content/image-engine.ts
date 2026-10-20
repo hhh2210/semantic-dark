@@ -6,6 +6,7 @@ import {
 import type {ThemeConfig} from '../types';
 import {transformDiagramImage} from './raster-image';
 import {RasterWorkerClient} from './raster-worker-client';
+import {upgradeInsecureMedia} from './upgrade-insecure';
 
 const FILTER_ATTRIBUTE = 'data-semantic-dark-image-filter';
 const KIND_ATTRIBUTE = 'data-semantic-dark-image-kind';
@@ -125,6 +126,7 @@ export class ImageThemeEngine {
 
   private queue(image: HTMLImageElement): void {
     if (this.processed.has(image)) return;
+    upgradeInsecureMedia(image);
     this.processed.add(image);
     if (this.intersection) this.intersection.observe(image);
     else void this.analyze(image, this.generation);
