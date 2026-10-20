@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "semantic-dark.held-out-exposure-receipt.v2.schema.json",
+  "title": "Semantic Dark held-out exposure receipt v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "claimId",
+    "status",
+    "metricSpecSha256",
+    "holdouts",
+    "variants",
+    "expectedMetricPayloadCountPerArm",
+    "profiles",
+    "candidateFreezeCommit",
+    "evaluatorCommit",
+    "engineCommit",
+    "log",
+    "failureConsumesExposure",
+    "createdAt",
+    "pid"
+  ],
+  "properties": {
+    "schema": {"const": "semantic-dark.held-out-exposure-receipt.v2"},
+    "claimId": {"$ref": "#/$defs/sha256"},
+    "status": {"const": "claimed-consumes-exposure"},
+    "metricSpecSha256": {"$ref": "#/$defs/sha256"},
+    "holdouts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/holdout"}
+    },
+    "variants": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/identifier"}
+    },
+    "expectedMetricPayloadCountPerArm": {"const": 19},
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline", "candidate"],
+      "properties": {
+        "baseline": {"$ref": "#/$defs/profilePin"},
+        "candidate": {"$ref": "#/$defs/profilePin"}
+      }
+    },
+    "candidateFreezeCommit": {"$ref": "#/$defs/commit"},
+    "evaluatorCommit": {"$ref": "#/$defs/commit"},
+    "engineCommit": {"$ref": "#/$defs/commit"},
+    "log": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path"],
+      "properties": {
+        "id": {"$ref": "#/$defs/logId"},
+        "path": {"type": "string", "pattern": "^/", "minLength": 2}
+      }
+    },
+    "failureConsumesExposure": {"const": true},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "pid": {"type": "integer", "minimum": 1}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "identifier": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "logId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "holdout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "protocolSha256"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "protocolSha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "profilePin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semanticSha256", "fileSha256"],
+      "properties": {
+        "semanticSha256": {"$ref": "#/$defs/sha256"},
+        "fileSha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

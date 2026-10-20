@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "semantic-dark.held-out-exposure-completion.v2.schema.json",
+  "title": "Semantic Dark held-out exposure completion v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "claimId",
+    "receiptSha256",
+    "metricSpecSha256",
+    "status",
+    "process",
+    "failureKinds",
+    "metricPayloadCountKnown",
+    "metricPayloadCountValid",
+    "metricPayloadCount",
+    "log",
+    "completedAt",
+    "supervisorPid"
+  ],
+  "properties": {
+    "schema": {"const": "semantic-dark.held-out-exposure-completion.v2"},
+    "claimId": {"$ref": "#/$defs/sha256"},
+    "receiptSha256": {"$ref": "#/$defs/sha256"},
+    "metricSpecSha256": {"$ref": "#/$defs/sha256"},
+    "status": {"enum": ["completed", "failed"]},
+    "process": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["childPid", "exitCode", "signal"],
+      "properties": {
+        "childPid": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+        "exitCode": {"oneOf": [{"type": "integer"}, {"type": "null"}]},
+        "signal": {"oneOf": [{"type": "string", "minLength": 1}, {"type": "null"}]}
+      }
+    },
+    "failureKinds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["exit-code", "signal", "spawn-error", "metric-payload-count", "supervisor"]
+      }
+    },
+    "metricPayloadCountKnown": {"type": "boolean"},
+    "metricPayloadCountValid": {"type": "boolean"},
+    "metricPayloadCount": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/systemMetricPayloadCount"}
+    },
+    "log": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "byteLength", "sha256"],
+      "properties": {
+        "id": {"$ref": "#/$defs/logId"},
+        "path": {"type": "string", "pattern": "^/", "minLength": 2},
+        "byteLength": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "completedAt": {"type": "string", "format": "date-time"},
+    "supervisorPid": {"type": "integer", "minimum": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "completed"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "process": {
+            "properties": {"exitCode": {"const": 0}, "signal": {"type": "null"}}
+          },
+          "failureKinds": {"maxItems": 0},
+          "metricPayloadCountKnown": {"const": true},
+          "metricPayloadCountValid": {"const": true},
+          "metricPayloadCount": {
+            "items": {
+              "properties": {
+                "arms": {
+                  "items": {"properties": {"count": {"const": 19}}}
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {"properties": {"failureKinds": {"minItems": 1}}}
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "identifier": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "logId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "armMetricPayloadCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["armId", "count"],
+      "properties": {
+        "armId": {"$ref": "#/$defs/identifier"},
+        "count": {"oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]}
+      }
+    },
+    "systemMetricPayloadCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["systemId", "arms"],
+      "properties": {
+        "systemId": {"$ref": "#/$defs/identifier"},
+        "arms": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/armMetricPayloadCount"}
+        }
+      }
+    }
+  }
+}
