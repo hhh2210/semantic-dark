@@ -27,6 +27,7 @@ import type {
 } from '../../src/testing/paired-theme/types';
 import {
   loadChangedV2Spec,
+  loadMaterialV2Protocol,
   makeV2SpecFixture,
   sha256,
   type V2SpecFixture,
@@ -42,26 +43,7 @@ let loaded: LoadedV2RegisteredProtocol;
 
 beforeAll(async () => {
   fixture = await makeV2SpecFixture();
-  const document = structuredClone(fixture.document) as Record<string, any>;
-  const sceneBytes = readFileSync(path.join(
-    process.cwd(), 'fixtures/paired-theme/common-scenes.v1.json',
-  ));
-  await writeFile(path.join(fixture.root, 'fixtures/scenes.json'), sceneBytes);
-  for (const entry of document.registry.systems) entry.sceneManifestSha256 = sha256(sceneBytes);
-  document.records.sceneManifestSha256 = sha256(sceneBytes);
-  const protocol = JSON.parse(readFileSync(path.join(
-    process.cwd(), 'fixtures/paired-theme/v2/material.protocol.json',
-  ), 'utf8')) as Record<string, any>;
-  const protocolBytes = `${JSON.stringify(protocol)}\n`;
-  const material = document.registry.systems.find((entry: Record<string, unknown>) =>
-    entry.id === 'material');
-  material.adapterId = protocol.adapterId;
-  material.protocolSha256 = sha256(protocolBytes);
-  await writeFile(path.join(fixture.root, material.protocolPath), protocolBytes);
-  await writeFile(path.join(fixture.root, 'pnpm-lock.yaml'), packageLock(protocol.source.package));
-  fixture.document = document;
-  contract = await loadChangedV2Spec(fixture, document);
-  loaded = await loadV2RegisteredProtocol(contract, 'material', fixture.root);
+  ({contract, loaded} = await loadMaterialV2Protocol(fixture));
 });
 
 afterAll(async () => rm(fixture.root, {recursive: true, force: true}));
@@ -267,9 +249,4 @@ function colorFor(variant: string, paint: PaintDecision): string {
     } as const)[paint.token];
   }
   return paint.role === 'text' ? '#111111' : paint.role === 'background' ? '#ffffff' : '#eeeeee';
-}
-
-function packageLock(pin: {name: string; version: string; integrity: string}): string {
-  return `lockfileVersion: '9.0'\n\npackages:\n\n  '${pin.name}@${pin.version}':\n` +
-    `    resolution: {integrity: ${pin.integrity}}\n\nsnapshots:\n`;
 }

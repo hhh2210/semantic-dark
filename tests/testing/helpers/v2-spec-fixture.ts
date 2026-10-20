@@ -3,7 +3,14 @@ import {mkdtemp, mkdir, readFile, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 
-import {loadV2EvaluationContract} from '../../../src/testing/paired-theme/v2/contract';
+import {
+  loadV2EvaluationContract,
+  type ValidatedV2EvaluationContract,
+} from '../../../src/testing/paired-theme/v2/contract';
+import {
+  loadV2RegisteredProtocol,
+  type LoadedV2RegisteredProtocol,
+} from '../../../src/testing/paired-theme/v2/protocol';
 
 export interface V2SpecFixture {
   root: string;
@@ -197,4 +204,36 @@ export async function currentV2SpecSha(fixture: V2SpecFixture): Promise<string> 
 
 export function sha256(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+/** Register the real Material protocol and common scenes, then load them from pinned bytes. */
+export async function loadMaterialV2Protocol(fixture: V2SpecFixture): Promise<{
+  contract: ValidatedV2EvaluationContract;
+  loaded: LoadedV2RegisteredProtocol;
+}> {
+  const document = structuredClone(fixture.document) as Record<string, any>;
+  const sceneBytes = await readFile(path.join(
+    process.cwd(), 'fixtures/paired-theme/common-scenes.v1.json',
+  ));
+  await writeFile(path.join(fixture.root, 'fixtures/scenes.json'), sceneBytes);
+  for (const entry of document.registry.systems) entry.sceneManifestSha256 = sha256(sceneBytes);
+  document.records.sceneManifestSha256 = sha256(sceneBytes);
+  const protocol = JSON.parse(await readFile(path.join(
+    process.cwd(), 'fixtures/paired-theme/v2/material.protocol.json',
+  ), 'utf8')) as Record<string, any>;
+  const protocolBytes = `${JSON.stringify(protocol)}\n`;
+  const material = document.registry.systems.find((entry: Record<string, unknown>) =>
+    entry.id === 'material');
+  material.adapterId = protocol.adapterId;
+  material.protocolSha256 = sha256(protocolBytes);
+  await writeFile(path.join(fixture.root, material.protocolPath), protocolBytes);
+  await writeFile(path.join(fixture.root, 'pnpm-lock.yaml'), packageLock(protocol.source.package));
+  fixture.document = document;
+  const contract = await loadChangedV2Spec(fixture, document);
+  return {contract, loaded: await loadV2RegisteredProtocol(contract, 'material', fixture.root)};
+}
+
+function packageLock(pin: {name: string; version: string; integrity: string}): string {
+  return `lockfileVersion: '9.0'\n\npackages:\n\n  '${pin.name}@${pin.version}':\n` +
+    `    resolution: {integrity: ${pin.integrity}}\n\nsnapshots:\n`;
 }
