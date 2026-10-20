@@ -1,4 +1,8 @@
-/** Rewrite page-authored `http:` media URLs to `https:` before engines force loads. */
+/**
+ * Rewrite page-authored `http:` media URLs to `https:` before engines force loads.
+ * Only secure pages produce Mixed Content warnings; `http:` pages are left untouched
+ * because their media hosts (for example local servers) may not serve TLS at all.
+ */
 
 const MEDIA_SELECTOR = 'img, source, video, audio, image';
 
@@ -6,6 +10,7 @@ export function upgradeInsecureUrl(value: string, base = location.href): string 
   const trimmed = value.trim();
   if (!trimmed || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return value;
   try {
+    if (new URL(base).protocol !== 'https:') return value;
     const url = new URL(trimmed, base);
     if (url.protocol !== 'http:') return value;
     url.protocol = 'https:';
@@ -57,6 +62,7 @@ export function upgradeInsecureMedia(root: ParentNode = document): number {
 
 /** Keep upgrading media as the page mutates. Returns a disconnect callback. */
 export function observeInsecureMedia(root: Document | Element = document): () => void {
+  if (location.protocol !== 'https:') return () => undefined;
   upgradeInsecureMedia(root);
   const observer = new MutationObserver((records) => {
     for (const record of records) {

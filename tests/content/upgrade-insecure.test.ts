@@ -1,3 +1,4 @@
+// @vitest-environment-options {"url": "https://app.example/"}
 import {afterEach, describe, expect, it} from 'vitest';
 import {
   observeInsecureMedia,
@@ -17,6 +18,13 @@ describe('upgradeInsecureUrl', () => {
     expect(upgradeInsecureUrl('https://cdn.example/a.jpg')).toBe('https://cdn.example/a.jpg');
     expect(upgradeInsecureUrl('data:image/png;base64,xx')).toBe('data:image/png;base64,xx');
     expect(upgradeInsecureUrl('blob:https://app.example/1')).toBe('blob:https://app.example/1');
+  });
+
+  it('leaves media alone on insecure pages, where no Mixed Content exists', () => {
+    expect(upgradeInsecureUrl('http://127.0.0.1:4173/diagram.png', 'http://127.0.0.1:4173/'))
+      .toBe('http://127.0.0.1:4173/diagram.png');
+    expect(upgradeInsecureSrcset('http://cdn.example/a.jpg 1x', 'http://app.example/'))
+      .toBe('http://cdn.example/a.jpg 1x');
   });
 });
 
