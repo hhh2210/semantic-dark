@@ -36,7 +36,6 @@ export interface V2EvidencePaths {
   completionsDirectory: string;
   logsDirectory: string;
   metricPayloadsDirectory: string;
-  promotionDirectory: string;
 }
 export interface VerifiedV2ExposureEvidence {
   receipt: V2ExposureReceipt;
@@ -71,8 +70,7 @@ export function resolveV2EvidencePaths(
   return {claimsDirectory: path.join(exposure, 'claims'),
     completionsDirectory: path.join(exposure, 'completions'),
     logsDirectory: path.join(store.rootDirectory, 'logs'),
-    metricPayloadsDirectory: path.join(exposure, 'metric-payloads'),
-    promotionDirectory: path.join(exposure, 'promotion')};
+    metricPayloadsDirectory: path.join(exposure, 'metric-payloads')};
 }
 /** Log identity is created first; the O_EXCL claim permanently consumes the primary pair. */
 export async function prepareV2Exposure(
@@ -189,18 +187,6 @@ export async function verifyImmutableV2EvidenceFile(
   return bytes;
 }
 
-export async function writeV2PromotionOnceMarker(
-  store: V2ExposureStore, value: unknown,
-): Promise<{path: string; sha256: string}> {
-  const paths = await ensureV2EvidencePaths(store);
-  const markerPath = path.join(paths.promotionDirectory, 'promotion-once.json');
-  return {path: markerPath, sha256: await writeExclusiveJson(markerPath, value, store)};
-}
-
-export function v2PromotionOnceMarkerPath(store: V2ExposureStore): string {
-  return path.join(resolveV2EvidencePaths(store).promotionDirectory, 'promotion-once.json');
-}
-
 async function ensureV2EvidencePaths(store: V2ExposureStore): Promise<V2EvidencePaths> {
   assertV2ExposureStore(store);
   await mkdir(store.rootDirectory, {recursive: true, mode: 0o700});
@@ -208,7 +194,7 @@ async function ensureV2EvidencePaths(store: V2ExposureStore): Promise<V2Evidence
   const paths = resolveV2EvidencePaths(store);
   const exposure = path.dirname(paths.claimsDirectory);
   for (const directory of [exposure, paths.claimsDirectory, paths.completionsDirectory,
-    paths.logsDirectory, paths.metricPayloadsDirectory, paths.promotionDirectory]) {
+    paths.logsDirectory, paths.metricPayloadsDirectory]) {
     await mkdir(directory, {mode: 0o700}).catch((error: NodeJS.ErrnoException) => {
       if (error.code !== 'EEXIST') throw error;
     });

@@ -13,7 +13,6 @@ import {
   loadChangedV2Spec,
   makeV2SpecFixture,
   sha256,
-  type V2SpecFixture,
 } from './helpers/v2-spec-fixture';
 
 const roots: string[] = [];
