@@ -33,6 +33,7 @@ export interface OfficialThemeProbe {
   source: OfficialThemeSource;
   catalogId: string | null;
   recipes: OfficialThemeRecipe[];
+  targets: {html: Element | null; body: Element | null};
 }
 
 const DARK_STYLESHEET_TITLE = /\b(dark|night|black|nocturne)\b/i;
@@ -46,6 +47,7 @@ export function probeOfficialTheme(root: Document, host: string): OfficialThemeP
     source: probeSource(site, generic),
     catalogId: site?.id ?? null,
     recipes,
+    targets: {html: root.documentElement, body: root.body},
   };
 }
 
@@ -68,11 +70,18 @@ export function officialThemeCandidates(probe: OfficialThemeProbe): OfficialThem
 }
 
 /** Snapshot resource fields as well as identity: a link can be repurposed in place. */
-export function officialThemeRecipeKeys(probe: OfficialThemeProbe): Array<string | HTMLLinkElement> {
-  return probe.recipes.flatMap((recipe) => recipe.type === 'stylesheet'
-    ? [recipe.link, JSON.stringify([recipe.link.href, recipe.link.title, recipe.link.rel,
-      recipe.link.type, recipe.link.disabled, recipe.link.media, recipe.disabled, recipe.media])]
-    : [recipeKey(recipe)]);
+export function officialThemeRecipeKeys(probe: OfficialThemeProbe): Array<string | Element> {
+  return probe.recipes.flatMap((recipe): Array<string | Element> => {
+    if (recipe.type === 'stylesheet') {
+      return [recipe.link, JSON.stringify([recipe.link.href, recipe.link.title, recipe.link.rel,
+        recipe.link.type, recipe.link.disabled, recipe.link.media, recipe.disabled, recipe.media])];
+    }
+    const target = probe.targets[recipe.target];
+    const source = recipe.type === 'attribute' ? target?.getAttribute(recipe.name) :
+      [...new Set([...recipe.add, ...(recipe.remove ?? [])])].sort()
+        .map((token) => [token, target?.classList.contains(token)]);
+    return [target ?? recipe.target, JSON.stringify([recipeKey(recipe), source])];
+  });
 }
 
 /** Official success needs visual dark, not only a marker we just wrote. */

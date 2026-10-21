@@ -89,6 +89,7 @@ class FakeOfficial implements OfficialThemeLaneLike {
       source: this.activateResult ? 'catalog' : 'none',
       catalogId: this.activateResult ? 'zhihu' : null,
       recipes: this.activateResult ? this.recipes : [],
+      targets: {html: document.documentElement, body: document.body},
     };
   }
 
@@ -650,4 +651,48 @@ it('re-probes changed candidates after an async failure instead of activating a 
   official.waits[1]!.resolve();
   await until(() => controller.getStatus().decision === 'official-dark');
   controller.stop();
+});
+
+it.each(['html', 'body'] as const)('gives a replacement %s a fresh budget for the same recipe', async (target) => {
+  const official = new FakeOfficial();
+  official.recipes = [{type: 'attribute', target, name: 'data-theme', value: 'dark'}];
+  const detector = new FakeDetector(...Array.from({length: 12}, () => result('light')));
+  const {controller} = harness('auto', detector, async () => {}, official);
+  await controller.start();
+  await controller.recheck();
+  await controller.recheck();
+  expect(official.activates).toBe(2);
+  const old = target === 'html' ? document.documentElement : document.body;
+  const replacement = old.cloneNode(true) as HTMLElement;
+  old.replaceWith(replacement);
+  try {
+    detector.samples.push(result('light'), result('light'), result('native-dark'));
+    await controller.recheck();
+    expect(official.activates).toBe(3);
+    expect(controller.getStatus().decision).toBe('official-dark');
+  } finally {
+    controller.stop();
+    replacement.replaceWith(old);
+  }
+});
+
+it('resets the budget when a root attribute source state changes without changing its requested value', async () => {
+  document.documentElement.setAttribute('data-theme', 'light');
+  const official = new FakeOfficial();
+  const detector = new FakeDetector(...Array.from({length: 12}, () => result('light')));
+  const {controller} = harness('auto', detector, async () => {}, official);
+  try {
+    await controller.start();
+    await controller.recheck();
+    await controller.recheck();
+    expect(official.activates).toBe(2);
+    document.documentElement.setAttribute('data-theme', 'system');
+    detector.samples.push(result('light'), result('light'), result('native-dark'));
+    await controller.recheck();
+    expect(official.activates).toBe(3);
+    expect(controller.getStatus().decision).toBe('official-dark');
+  } finally {
+    controller.stop();
+    document.documentElement.removeAttribute('data-theme');
+  }
 });

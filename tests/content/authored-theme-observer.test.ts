@@ -87,3 +87,42 @@ describe('authored theme suspension', () => {
     expect(changed).not.toHaveBeenCalled();
   });
 });
+
+it('observes stylesheet attributes and style text in nested body containers', async () => {
+  const {changed} = setup();
+  const container = document.createElement('div');
+  container.innerHTML = '<link rel="stylesheet" href="/body.css"><style>body {color:black}</style>';
+  document.body.append(container);
+  await tick();
+  changed.mockClear();
+  const link = container.querySelector('link')!;
+  try {
+    for (const [name, value] of [['disabled', ''], ['media', 'print'], ['href', '/next.css'], ['rel', 'alternate']]) {
+      link.setAttribute(name!, value!);
+      await tick();
+      expect(changed).toHaveBeenCalledTimes(1);
+      changed.mockClear();
+    }
+    container.querySelector('style')!.firstChild!.nodeValue = 'body {color:white}';
+    await tick();
+    expect(changed).toHaveBeenCalledTimes(1);
+  } finally { container.remove(); }
+});
+
+it('ignores unrelated body metadata and extension-owned style text', async () => {
+  const {changed} = setup();
+  const container = document.createElement('div');
+  container.innerHTML = '<a href="/first">link</a><input><span>text</span><div data-semantic-dark-ui><style>body {color:black}</style></div>';
+  document.body.append(container);
+  await tick();
+  changed.mockClear();
+  try {
+    document.body.setAttribute('title', 'tooltip');
+    container.querySelector('a')!.href = '/second';
+    container.querySelector('input')!.disabled = true;
+    container.querySelector('span')!.firstChild!.nodeValue = 'updated';
+    container.querySelector('style')!.firstChild!.nodeValue = 'body {color:white}';
+    await tick();
+    expect(changed).not.toHaveBeenCalled();
+  } finally { container.remove(); document.body.removeAttribute('title'); }
+});

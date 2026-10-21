@@ -91,6 +91,61 @@ export async function exerciseOfficialTheme({session, fixtureUrl, fixtureDir, ar
     }, {url, disabled});
   }
   try {
+    for (const target of ['html', 'body']) {
+      await check(`replacement ${target} gets a fresh budget for an identical recipe`, async () => {
+        const selector = `${target}:not([data-broken])[data-theme="dark"]`;
+        const markup = target === 'html'
+          ? html.replace('data-theme="light"', 'data-theme="light" data-broken')
+          : stylesheetMarkup.replace('<body>', '<body data-theme="light" data-broken>');
+        const styles = css.replaceAll(':root[data-theme="dark"]', selector);
+        await load({markup, styles, initialMode: 'off'});
+        await page.evaluate(() => {
+          globalThis.rootAttempts = 0;
+          const observer = new MutationObserver((records) => {
+            globalThis.rootAttempts += records.filter((record) => record.oldValue === 'light').length;
+          });
+          observer.observe(document, {attributes: true, subtree: true, attributeFilter: ['data-theme'], attributeOldValue: true});
+        });
+        await mode('auto');
+        await decision('applied-light');
+        await page.evaluate(() => document.documentElement.classList.add('route-two'));
+        await page.waitForFunction((target) => globalThis.rootAttempts === 2 &&
+          (target === 'html' ? document.documentElement : document.body).getAttribute('data-theme') === 'light', target);
+        await decision('applied-light');
+        await page.evaluate(({target, markup}) => {
+          const parsed = new DOMParser().parseFromString(markup, 'text/html');
+          const replacement = target === 'html' ? parsed.documentElement : parsed.body;
+          replacement.removeAttribute('data-broken');
+          (target === 'html' ? document.documentElement : document.body).replaceWith(replacement);
+        }, {target, markup});
+        await decision('official-dark');
+        assert.equal(await page.evaluate((target) =>
+          (target === 'html' ? document.documentElement : document.body).getAttribute('data-theme'), target), 'dark');
+      });
+    }
+    for (const mutation of ['media', 'disabled']) {
+      await check(`body-hosted stylesheet ${mutation} changes reconcile`, async () => {
+        await load({markup: stylesheetMarkup, initialMode: 'off'});
+        serve('/body-dark.css', darkCss);
+        await page.evaluate(() => {
+          const container = document.createElement('div');
+          const link = document.createElement('link');
+          link.id = 'body-dark'; link.rel = 'alternate stylesheet'; link.title = 'Dark';
+          link.href = '/body-dark.css'; link.disabled = true;
+          container.append(link); document.body.append(container);
+        });
+        await mode('auto');
+        await decision('official-dark');
+        if (mutation === 'media') {
+          await page.evaluate(() => { document.getElementById('body-dark').media = 'print'; });
+          await decision('applied-light');
+        } else {
+          await page.evaluate(() => { document.getElementById('body-dark').disabled = true; });
+          await page.waitForFunction(() => !document.getElementById('body-dark').disabled, undefined, {timeout});
+          await decision('official-dark');
+        }
+      });
+    }
     for (const firstWorks of [true, false]) {
       await check(`dark variants stay exclusive; first candidate works=${firstWorks}`, async () => {
         await load({markup: stylesheetMarkup, initialMode: 'off'});

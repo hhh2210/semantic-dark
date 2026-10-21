@@ -97,7 +97,10 @@ so it is left to the transform fallback.
 Root-only activation is tried first. Stylesheet variants are then tried one at a
 time (files with the same title form one variant), restoring each failed
 candidate before the next; only the visually confirmed
-variant is retained. A newly added or repurposed link gets a fresh failure budget.
+variant is retained. A newly added or repurposed link gets a fresh failure budget. Root identity and
+relevant source attribute/token values also key the budget, so replacement SPA
+roots get a fresh attempt. Stylesheet metadata and style text are observed across
+the document, including links under body, while unrelated body mutations are ignored.
 
 Enabled CSS gets up to two seconds to load before visual confirmation. Load,
 error, timeout and cancellation all settle the wait. A cancelled generation

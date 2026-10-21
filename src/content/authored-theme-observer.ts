@@ -1,9 +1,14 @@
 import {BOOLEAN_DARK_ATTRIBUTES, THEME_ATTRIBUTES} from './theme-markers';
 
 const ROOT_THEME_ATTRIBUTES = ['class', 'style', ...THEME_ATTRIBUTES, ...BOOLEAN_DARK_ATTRIBUTES] as const;
-const HEAD_THEME_ATTRIBUTES = [
-  'class', 'content', 'disabled', 'href', 'media', 'name', 'rel', 'style', 'title', 'type',
+const STYLESHEET_ATTRIBUTES = [
+  'content', 'disabled', 'href', 'media', 'name', 'rel', 'title', 'type',
 ] as const;
+const HEAD_THEME_ATTRIBUTES = ['class', 'style', ...STYLESHEET_ATTRIBUTES] as const;
+const DOCUMENT_THEME_OPTIONS: MutationObserverInit = {
+  childList: true, subtree: true, characterData: true,
+  attributes: true, attributeOldValue: true, attributeFilter: [...STYLESHEET_ATTRIBUTES],
+};
 const THEME_NODE_SELECTOR = [
   'style:not([data-semantic-dark-sheet])',
   'link[rel~="stylesheet" i]',
@@ -34,7 +39,7 @@ export class AuthoredThemeObserver {
       this.observeThemeContainers();
       if (records.some(isAuthoredThemeMutation)) this.onChange();
     });
-    this.observer.observe(document, {childList: true, subtree: true});
+    this.observer.observe(document, DOCUMENT_THEME_OPTIONS);
     this.observeThemeContainers();
     document.addEventListener('load', this.notifyForLoadedStyle, true);
   }
@@ -60,7 +65,7 @@ export class AuthoredThemeObserver {
 
   resume(): void {
     if (!this.observer || this.suspensionDepth === 0 || --this.suspensionDepth > 0) return;
-    this.observer.observe(document, {childList: true, subtree: true});
+    this.observer.observe(document, DOCUMENT_THEME_OPTIONS);
     this.observeThemeContainers();
   }
 
@@ -99,7 +104,7 @@ export class AuthoredThemeObserver {
 function isAuthoredThemeMutation(record: MutationRecord): boolean {
   if (record.type === 'characterData') {
     const style = record.target.parentElement?.closest('style');
-    return style != null && !style.hasAttribute('data-semantic-dark-sheet');
+    return style != null && !style.closest('[data-semantic-dark-sheet],[data-semantic-dark-ui]');
   }
   if (record.type === 'attributes') {
     if (record.target instanceof Element &&
@@ -108,7 +113,10 @@ function isAuthoredThemeMutation(record: MutationRecord): boolean {
     if (record.attributeName === 'style' && record.target instanceof Element &&
       authoredInlineStyle(record.oldValue ?? '') ===
         authoredInlineStyle(record.target.getAttribute('style') ?? '')) return false;
-    if (record.target === document.documentElement || record.target === document.body) return true;
+    if (record.target === document.documentElement || record.target === document.body) {
+      return record.attributeName !== null &&
+        (ROOT_THEME_ATTRIBUTES as readonly string[]).includes(record.attributeName);
+    }
     if (record.target === document.head) return true;
     if (record.target instanceof HTMLLinkElement && record.attributeName === 'rel' &&
       (record.oldValue ?? '').toLowerCase().split(/\s+/).includes('stylesheet')) return true;

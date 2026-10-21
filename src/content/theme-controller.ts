@@ -47,7 +47,7 @@ export class ThemeController {
   private status: PageThemeStatus;
   private readonly officialTheme: OfficialThemeLaneLike;
   private officialFailures = 0;
-  private officialRecipeKeys: Array<string | HTMLLinkElement> = [];
+  private officialRecipeKeys: Array<string | Element> = [];
 
   constructor(
     config: ThemeConfig,
@@ -279,7 +279,7 @@ export class ThemeController {
     return 'failed';
   }
 
-  private sameOfficialRecipes(keys: readonly (string | HTMLLinkElement)[]): boolean {
+  private sameOfficialRecipes(keys: readonly (string | Element)[]): boolean {
     return keys.length === this.officialRecipeKeys.length &&
       keys.every((key, index) => key === this.officialRecipeKeys[index]);
   }
