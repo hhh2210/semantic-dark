@@ -1,8 +1,8 @@
-import {THEME_ATTRIBUTES} from './theme-markers';
+import {BOOLEAN_DARK_ATTRIBUTES, THEME_ATTRIBUTES} from './theme-markers';
 
-const ROOT_THEME_ATTRIBUTES = ['class', 'style', ...THEME_ATTRIBUTES] as const;
+const ROOT_THEME_ATTRIBUTES = ['class', 'style', ...THEME_ATTRIBUTES, ...BOOLEAN_DARK_ATTRIBUTES] as const;
 const HEAD_THEME_ATTRIBUTES = [
-  'class', 'content', 'disabled', 'href', 'media', 'name', 'rel', 'style',
+  'class', 'content', 'disabled', 'href', 'media', 'name', 'rel', 'style', 'title', 'type',
 ] as const;
 const THEME_NODE_SELECTOR = [
   'style:not([data-semantic-dark-sheet])',
@@ -16,13 +16,15 @@ export class AuthoredThemeObserver {
   private observedRoot: HTMLElement | null = null;
   private observedHead: HTMLHeadElement | null = null;
   private observedBody: HTMLElement | null = null;
-  private suspended = false;
+  private suspensionDepth = 0;
 
   constructor(private readonly onChange: () => void) {}
 
   private readonly notifyForLoadedStyle = (event: Event): void => {
+    if (this.suspensionDepth > 0 || !this.observer) return;
     if (!(event.target instanceof HTMLLinkElement || event.target instanceof HTMLStyleElement)) return;
-    if (event.target.matches('[data-semantic-dark-sheet]')) return;
+    if (!event.target.matches(THEME_NODE_SELECTOR) ||
+      event.target.matches('[data-semantic-dark-sheet]')) return;
     this.onChange();
   };
 
@@ -38,7 +40,7 @@ export class AuthoredThemeObserver {
   }
 
   stop(): void {
-    this.suspended = false;
+    this.suspensionDepth = 0;
     this.observer?.disconnect();
     this.observer = null;
     this.observedRoot = null;
@@ -48,18 +50,16 @@ export class AuthoredThemeObserver {
   }
 
   suspend(): void {
-    if (!this.observer || this.suspended) return;
+    if (!this.observer || this.suspensionDepth++ > 0) return;
     this.observer.takeRecords();
     this.observer.disconnect();
-    this.suspended = true;
     this.observedRoot = null;
     this.observedHead = null;
     this.observedBody = null;
   }
 
   resume(): void {
-    if (!this.observer || !this.suspended) return;
-    this.suspended = false;
+    if (!this.observer || this.suspensionDepth === 0 || --this.suspensionDepth > 0) return;
     this.observer.observe(document, {childList: true, subtree: true});
     this.observeThemeContainers();
   }
@@ -102,12 +102,16 @@ function isAuthoredThemeMutation(record: MutationRecord): boolean {
     return style != null && !style.hasAttribute('data-semantic-dark-sheet');
   }
   if (record.type === 'attributes') {
+    if (record.target instanceof Element &&
+      record.target.closest('[data-semantic-dark-sheet],[data-semantic-dark-ui]')) return false;
     if (record.attributeName?.startsWith('data-semantic-dark-')) return false;
     if (record.attributeName === 'style' && record.target instanceof Element &&
       authoredInlineStyle(record.oldValue ?? '') ===
         authoredInlineStyle(record.target.getAttribute('style') ?? '')) return false;
     if (record.target === document.documentElement || record.target === document.body) return true;
     if (record.target === document.head) return true;
+    if (record.target instanceof HTMLLinkElement && record.attributeName === 'rel' &&
+      (record.oldValue ?? '').toLowerCase().split(/\s+/).includes('stylesheet')) return true;
     return record.target instanceof Element && record.target.matches(THEME_NODE_SELECTOR);
   }
   return [...record.addedNodes, ...record.removedNodes].some(isThemeNode);
@@ -116,7 +120,7 @@ function isAuthoredThemeMutation(record: MutationRecord): boolean {
 function isThemeNode(node: Node): boolean {
   const element = node instanceof Element ? node : node.parentElement;
   if (!element || element.closest('[data-semantic-dark-sheet],[data-semantic-dark-ui]')) return false;
-  return element.matches('head,body') || element.matches(THEME_NODE_SELECTOR) ||
+  return element.matches('html,head,body') || element.matches(THEME_NODE_SELECTOR) ||
     element.querySelector(THEME_NODE_SELECTOR) !== null;
 }
 

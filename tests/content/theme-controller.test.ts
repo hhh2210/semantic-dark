@@ -107,7 +107,11 @@ class FakeOfficial implements OfficialThemeLaneLike {
 
 class FakeEngine implements ThemeEngineLike {
   readonly enabled: boolean[] = [];
-  update(config: ThemeConfig): void { this.enabled.push(config.enabled); }
+  readonly configs: ThemeConfig[] = [];
+  update(config: ThemeConfig): void {
+    this.enabled.push(config.enabled);
+    this.configs.push(config);
+  }
 }
 
 function config(mode: ThemeMode): ThemeConfig {
@@ -287,7 +291,7 @@ describe('ThemeController', () => {
     const official = new FakeOfficial();
     const state = harness(
       'auto',
-      new FakeDetector(result('light'), result('light'), result('light')),
+      new FakeDetector(result('light'), result('light'), result('light'), result('light'), result('light')),
       async () => {},
       official,
     );
@@ -337,7 +341,7 @@ describe('ThemeController', () => {
     const official = new FakeOfficial();
     const state = harness(
       'auto',
-      new FakeDetector(result('light'), result('light'), markerOnlyNativeDark()),
+      new FakeDetector(result('light'), result('light'), markerOnlyNativeDark(), result('light'), result('light')),
       async () => {},
       official,
     );
@@ -346,5 +350,185 @@ describe('ThemeController', () => {
     expect(state.controller.getStatus().decision).toBe('applied-light');
     expect(official.applied).toBe(false);
     expect(state.dom.enabled).toEqual([true]);
+  });
+});
+
+function deferred() {
+  let resolve = (): void => {};
+  let reject = (_error: Error): void => {};
+  const promise = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+  return {promise, resolve, reject};
+}
+
+class WaitingOfficial extends FakeOfficial {
+  waits: ReturnType<typeof deferred>[] = [];
+  signals: AbortSignal[] = [];
+  settle(signal: AbortSignal): Promise<void> {
+    const wait = deferred();
+    this.waits.push(wait);
+    this.signals.push(signal);
+    return wait.promise;
+  }
+}
+
+async function until(check: () => boolean): Promise<void> {
+  for (let i = 0; i < 30 && !check(); i += 1) await Promise.resolve();
+  expect(check()).toBe(true);
+}
+
+describe('ThemeController async reconciliation', () => {
+  it.each(['off', 'on'] as const)('cancels pending CSS on auto -> %s -> auto without stale rollback', async (mode) => {
+    const official = new WaitingOfficial();
+    const detector = new FakeDetector(result('light'), result('light'));
+    const {controller} = harness('auto', detector, async () => {}, official);
+    const first = controller.start();
+    await until(() => official.waits.length === 1);
+    await controller.update(config(mode));
+    expect(official.applied).toBe(false);
+    expect(official.signals[0]?.aborted).toBe(true);
+    expect(controller.getStatus().decision).toBe(`user-${mode}`);
+    detector.samples.push(result('light'), result('light'), result('native-dark'));
+    const second = controller.update(config('auto'));
+    await until(() => official.waits.length === 2);
+    official.waits[1]!.resolve();
+    await second;
+    expect(controller.getStatus().decision).toBe('official-dark');
+    const restores = official.restores;
+    official.waits[0]!.resolve();
+    await first;
+    expect(controller.getStatus().decision).toBe('official-dark');
+    expect(official.applied).toBe(true);
+    expect(official.restores).toBe(restores);
+    controller.stop();
+  });
+
+  it('reconciles same-mode updates while CSS is pending', async () => {
+    const official = new WaitingOfficial();
+    const detector = new FakeDetector(result('light'), result('light'));
+    const {controller} = harness('auto', detector, async () => {}, official);
+    const first = controller.start();
+    await until(() => official.waits.length === 1);
+    detector.samples.push(result('light'), result('light'), result('native-dark'));
+    const second = controller.update({...config('auto'), minimumTextContrast: 7});
+    await until(() => official.waits.length === 2);
+    official.waits[0]!.reject(new Error('stale stylesheet failure'));
+    await first;
+    expect(official.applied).toBe(true);
+    official.waits[1]!.resolve();
+    await second;
+    expect(controller.getStatus().decision).toBe('official-dark');
+    controller.stop();
+  });
+
+  it('does not drop a scheduled authored-theme change on a same-mode update', async () => {
+    const detector = new FakeDetector(result('native-dark'));
+    const {controller} = harness('auto', detector);
+    await controller.start();
+    detector.samples.push(result('light'), result('light'));
+    detector.emit();
+    await controller.update(config('auto'));
+    expect(controller.getStatus().decision).toBe('applied-light');
+    controller.stop();
+  });
+
+  it.each(['system-light', 'stop'] as const)('rolls back pending official state on %s', async (action) => {
+    const official = new WaitingOfficial();
+    const detector = new FakeDetector(result('light'), result('light'));
+    const {controller, dom} = harness('auto', detector, async () => {}, official);
+    const pending = controller.start();
+    await until(() => official.waits.length === 1);
+    if (action === 'stop') controller.stop();
+    else detector.setSystemDark(false);
+    expect(official.signals[0]?.aborted).toBe(true);
+    expect(official.applied).toBe(false);
+    official.waits[0]!.resolve();
+    await pending;
+    expect(dom.enabled).toEqual([]);
+    expect(official.applied).toBe(false);
+    if (action === 'system-light') expect(controller.getStatus().decision).toBe('system-light');
+    controller.stop();
+  });
+
+  it('rolls back on settlement failure and fails closed', async () => {
+    const official = new WaitingOfficial();
+    const {controller, dom} = harness('auto', new FakeDetector(result('light'), result('light')), async () => {}, official);
+    const pending = controller.start();
+    await until(() => official.waits.length === 1);
+    official.waits[0]!.reject(new Error('stylesheet failure'));
+    await pending;
+    expect(official.applied).toBe(false);
+    expect(controller.getStatus().decision).toBe('ambiguous');
+    expect(dom.enabled).toEqual([]);
+    controller.stop();
+  });
+
+  it('does not restart pending CSS on its load event and samples later site state', async () => {
+    const official = new WaitingOfficial();
+    const detector = new FakeDetector(result('light'), result('light'));
+    const {controller} = harness('auto', detector, async () => {}, official);
+    const pending = controller.start();
+    await until(() => official.waits.length === 1);
+    detector.emit();
+    expect(official.restores).toBe(0);
+    detector.samples.push(result('forced-colors'), result('forced-colors'));
+    official.waits[0]!.resolve();
+    await pending;
+    expect(controller.getStatus().decision).toBe('forced-colors');
+    expect(official.applied).toBe(false);
+    controller.stop();
+  });
+
+  it('resamples after rollback instead of applying stale light evidence', async () => {
+    const official = new FakeOfficial();
+    const detector = new FakeDetector(result('light'), result('light'), markerOnlyNativeDark(), result('native-dark'));
+    const {controller, dom} = harness('auto', detector, async () => {}, official);
+    await controller.start();
+    expect(controller.getStatus().decision).toBe('native-dark');
+    expect(official.applied).toBe(false);
+    expect(dom.enabled).toEqual([]);
+    controller.stop();
+  });
+
+  it('resamples after a previously confirmed official theme loses visual darkness', async () => {
+    const official = new FakeOfficial();
+    const detector = new FakeDetector(result('light'), result('light'), result('native-dark'));
+    const {controller, dom} = harness('auto', detector, async () => {}, official);
+    await controller.start();
+    detector.samples.push(markerOnlyNativeDark(), result('ambiguous'));
+    await controller.recheck();
+    expect(controller.getStatus().decision).toBe('ambiguous');
+    expect(official.applied).toBe(false);
+    expect(dom.enabled).toEqual([]);
+    controller.stop();
+  });
+
+  it('stops retrying a failed official switch after two attempts', async () => {
+    const official = new FakeOfficial();
+    const detector = new FakeDetector(...Array.from({length: 14}, () => result('light')));
+    const {controller} = harness('auto', detector, async () => {}, official);
+    await controller.start();
+    await controller.recheck();
+    await controller.recheck();
+    expect(official.activates).toBe(2);
+    expect(controller.getStatus().decision).toBe('applied-light');
+    controller.stop();
+  });
+
+  it('refreshes force-on settings and restores the active marker on same-mode updates', async () => {
+    const {controller, dom} = harness('on', new FakeDetector());
+    await controller.start();
+    document.documentElement.removeAttribute('data-semantic-dark-active');
+    await controller.update({...config('on'), minimumTextContrast: 7});
+    expect(dom.configs.at(-1)?.minimumTextContrast).toBe(7);
+    expect(document.documentElement.hasAttribute('data-semantic-dark-active')).toBe(true);
+    controller.stop();
+  });
+
+  it('does not reactivate a stopped controller via an update', async () => {
+    const {controller, dom} = harness('off', new FakeDetector());
+    await controller.start();
+    controller.stop();
+    await controller.update(config('on'));
+    expect(dom.enabled).toEqual([]);
   });
 });

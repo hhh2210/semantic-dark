@@ -21,6 +21,10 @@ export async function createFixtureServer({fixtureDir, routes}) {
         return;
       }
 
+      if (typeof route === 'function') {
+        await route(request, response);
+        return;
+      }
       const [filename, contentType] = route;
       const body = await readFile(path.join(fixtureDir, filename));
       response.writeHead(200, {

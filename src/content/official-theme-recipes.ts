@@ -47,7 +47,9 @@ export function officialThemeLooksApplied(decision: NativeThemeDecision): boolea
   if (decision.kind !== 'native-dark') return false;
   const evidence = decision.evidence;
   if (decision.reason === 'dark-rendered-surfaces') return true;
-  if (decision.reason === 'dark-color-scheme-without-light-conflict') return true;
+  if (decision.reason === 'dark-color-scheme-without-light-conflict') {
+    return !evidence.lightCanvas && evidence.knownSamples >= 3 && evidence.darkCoverage >= 0.4;
+  }
   if (evidence.knownSamples >= 4 && evidence.darkCoverage >= 0.65 && evidence.lightCoverage <= 0.3) {
     return true;
   }
@@ -112,9 +114,10 @@ function stylesheetRecipes(root: Document): OfficialThemeMutation[] {
   return recipes;
 }
 
-function isStylesheetLink(link: HTMLLinkElement): boolean {
-  const rel = link.rel.toLowerCase();
-  return rel.split(/\s+/).includes('stylesheet') || rel.split(/\s+/).includes('alternate');
+export function isStylesheetLink(link: HTMLLinkElement): boolean {
+  return link.rel.toLowerCase().split(/\s+/).includes('stylesheet') &&
+    (!link.type || link.type.trim().toLowerCase() === 'text/css') &&
+    !!link.getAttribute('href') && !link.hasAttribute('data-semantic-dark-sheet');
 }
 
 function isDarkStylesheetCandidate(link: HTMLLinkElement): boolean {
@@ -123,9 +126,10 @@ function isDarkStylesheetCandidate(link: HTMLLinkElement): boolean {
   const darkTitle = title.length > 0 && DARK_STYLESHEET_TITLE.test(title);
   const darkMedia = /prefers-color-scheme:\s*dark/.test(media);
   if (!darkTitle && !darkMedia) return false;
-  const alternate = link.rel.toLowerCase().split(/\s+/).includes('alternate');
   const inertMedia = media === 'none' || media === 'not all';
-  return link.disabled || alternate || inertMedia;
+  // An unselected alternate set can report disabled=false. Selecting that set
+  // changes browser state we cannot restore through this link's properties.
+  return link.disabled || inertMedia;
 }
 
 function enabledStylesheetMedia(media: string): string {

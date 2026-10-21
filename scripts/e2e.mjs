@@ -18,6 +18,7 @@ import {
   waitForRestoredState,
 } from '../src/testing/e2e/assertions.mjs';
 import {contrastRatio, parseRgb} from '../src/testing/e2e/colors.mjs';
+import {exerciseOfficialTheme} from '../src/testing/e2e/official-theme.mjs';
 import {exerciseInteractiveDomEffects} from '../src/testing/e2e/dom-effects.mjs';
 import {verifyRgba8Quantization} from '../src/testing/e2e/rgba8-quantization.mjs';
 import {
@@ -67,8 +68,10 @@ async function main() {
   const profilePath = await mkdtemp(path.join(tmpdir(), 'semantic-dark-e2e-'));
   const fixture = await createFixtureServer(CONFIG);
   let session;
+  console.error(`Disposable E2E profile: ${profilePath}`);
+  let deadline;
 
-  try {
+  const run = async () => {
     const baseline = await captureBaseline({
       ...CONFIG,
       url: fixture.url,
@@ -236,6 +239,10 @@ async function main() {
     undefined, {timeout: CONFIG.timeout});
     await session.page.emulateMedia({colorScheme: 'dark'});
 
+    const officialRegression = await exerciseOfficialTheme({
+      session, fixtureUrl: fixture.url, fixtureDir: CONFIG.fixtureDir, routes: CONFIG.routes, timeout: CONFIG.timeout,
+    });
+
     const [beforeStats, afterStats, popupLightStats, popupDarkStats, popupNativeStats, popupOfficialStats] =
       await Promise.all([
         stat(beforePath),
@@ -271,6 +278,7 @@ async function main() {
           animationCurrentTime: {before: animationBefore, light: animationAfterLight, dark: animationAfterDark},
         },
       },
+      officialRegression,
       officialTheme: {
         url: officialUrl,
         state: officialState,
@@ -304,10 +312,17 @@ async function main() {
       consoleMessages: session.consoleMessages,
       pageErrors: session.pageErrors,
     }, null, 2));
+  };
+  try {
+    await Promise.race([run(), new Promise((_, reject) => {
+      deadline = setTimeout(() => reject(new Error('E2E exceeded 120 seconds')), 120_000);
+    })]);
   } finally {
+    clearTimeout(deadline);
     await session?.close();
     await fixture.close();
     await rm(profilePath, {recursive: true, force: true});
+    console.error(`Removed E2E profile: ${profilePath}`);
   }
 }
 

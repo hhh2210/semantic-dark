@@ -40,6 +40,8 @@ export class ThemeController {
   private started = false;
   private detectorRunning = false;
   private generation = 0;
+  private probeAbort: AbortController | null = null;
+  private pendingOfficialGeneration: number | null = null;
   private timer: number | null = null;
   private status: PageThemeStatus;
   private readonly officialTheme: OfficialThemeLaneLike;
@@ -74,8 +76,10 @@ export class ThemeController {
   async update(config: ThemeConfig): Promise<void> {
     const previousMode = this.config.mode;
     this.config = normalizeThemeConfig(config);
+    const interrupted = this.probeAbort !== null || this.timer !== null;
     this.cancelPendingProbe();
-    await this.reconcile(previousMode !== this.config.mode);
+    if (!this.started) return;
+    await this.reconcile(previousMode !== this.config.mode || interrupted);
   }
 
   async recheck(): Promise<void> {
@@ -114,6 +118,7 @@ export class ThemeController {
     if (this.config.mode === 'on') {
       this.stopDetector();
       this.releaseOfficialTheme();
+      if (this.active) this.applyToEngines(true);
       this.activate();
       this.setStatus('user-on', 'forced-on-by-user');
       return;
@@ -121,10 +126,9 @@ export class ThemeController {
 
     this.startDetector();
     if (this.pauseForSystemLight()) return;
-    if (modeChanged || this.status.decision === 'pending') {
+    if (this.active) this.applyToEngines(true);
+    if (modeChanged || this.status.decision === 'pending' || this.status.decision === 'system-light') {
       await this.probe();
-    } else if (this.active) {
-      this.applyToEngines(true);
     }
   }
 
@@ -143,6 +147,9 @@ export class ThemeController {
   private handleDetectorChange(): void {
     if (!this.started || this.config.mode !== 'auto') return;
     if (this.pauseForSystemLight()) return;
+    // The in-flight confirmation will sample these changes after CSS settles.
+    // Restarting on its own stylesheet load would roll back and re-enable it.
+    if (this.pendingOfficialGeneration !== null) return;
     this.cancelPendingProbe();
     if (this.active) {
       void this.probe();
@@ -164,34 +171,46 @@ export class ThemeController {
   }
 
   private async probe(): Promise<void> {
-    const generation = ++this.generation;
-    this.clearTimer();
+    this.cancelPendingProbe();
+    const generation = this.generation;
+    const abort = new AbortController();
+    this.probeAbort = abort;
     this.setStatus('pending', 'probing-authored-theme');
     try {
       await this.settle();
       if (!this.isCurrentProbe(generation)) return;
-      let result = this.sampleAuthoredTheme();
-      if (result.kind === 'light') {
-        await this.stableDelay();
-        if (!this.isCurrentProbe(generation)) return;
-        const confirmation = this.sampleAuthoredTheme();
-        result = confirmation.kind === 'light'
-          ? confirmation
-          : ambiguousConfirmation(result, confirmation);
+      let result = await this.sampleStableTheme(generation);
+      if (!this.isCurrentProbe(generation)) return;
+      if (this.officialTheme.isApplied() && !officialThemeLooksApplied(result)) {
+        this.releaseOfficialTheme();
+        this.officialFailures += 1;
+        result = await this.sampleStableTheme(generation);
       }
       if (!this.isCurrentProbe(generation)) return;
       if (result.kind === 'light') {
-        const official = await this.preferOfficialTheme(generation);
+        const official = await this.preferOfficialTheme(generation, abort.signal);
         if (!this.isCurrentProbe(generation)) return;
-        if (official) return;
+        if (official === 'applied') return;
+        // Rollback may expose new site/SPA state. Never apply an old light result.
+        if (official === 'failed') result = await this.sampleStableTheme(generation);
       }
-      this.applyDecision(result);
+      if (this.isCurrentProbe(generation)) this.applyDecision(result);
     } catch {
       if (this.isCurrentProbe(generation)) {
+        this.releaseOfficialTheme();
         this.deactivate();
         this.setStatus('ambiguous', 'source-theme-probe-failed');
       }
+    } finally {
+      if (this.probeAbort === abort) this.probeAbort = null;
     }
+  }
+
+  private async sampleStableTheme(generation: number): Promise<NativeThemeDecision> {
+    const result = this.sampleAuthoredTheme();
+    if (result.kind !== 'light') return result;
+    await this.stableDelay();
+    return this.isCurrentProbe(generation) ? this.sampleAuthoredTheme() : result;
   }
 
   private applyDecision(result: NativeThemeDecision): void {
@@ -203,17 +222,8 @@ export class ThemeController {
     }
     this.deactivate();
     if (result.kind === 'native-dark') {
-      if (this.officialTheme.isApplied()) {
-        if (officialThemeLooksApplied(result)) {
-          this.setStatus('official-dark', 'official-theme-activated');
-          return;
-        }
-        this.releaseOfficialTheme();
-        this.activate();
-        this.setStatus('applied-light', 'official-theme-lost-visual-dark');
-        return;
-      }
-      this.setStatus('native-dark', result.reason);
+      this.setStatus(this.officialTheme.isApplied() ? 'official-dark' : 'native-dark',
+        this.officialTheme.isApplied() ? 'official-theme-activated' : result.reason);
       return;
     }
     this.releaseOfficialTheme();
@@ -221,26 +231,41 @@ export class ThemeController {
     else this.setStatus('ambiguous', result.reason);
   }
 
-  private async preferOfficialTheme(generation: number): Promise<boolean> {
-    if (this.officialFailures >= MAX_OFFICIAL_ATTEMPTS) return false;
+  private async preferOfficialTheme(
+    generation: number,
+    signal: AbortSignal,
+  ): Promise<'unavailable' | 'applied' | 'failed'> {
+    if (this.officialFailures >= MAX_OFFICIAL_ATTEMPTS || !this.officialTheme.probe().capable) {
+      return 'unavailable';
+    }
+    this.deactivate();
+    this.pendingOfficialGeneration = generation;
     this.mutateAuthoredTheme(() => this.officialTheme.activate());
-    if (!this.officialTheme.isApplied()) return false;
+    if (!this.officialTheme.isApplied()) {
+      this.pendingOfficialGeneration = null;
+      return 'unavailable';
+    }
+    await this.officialTheme.settle?.(signal);
+    if (!this.isCurrentProbe(generation)) return 'failed';
     flushDocumentStyle(document.documentElement);
     await this.stableDelay();
-    if (!this.isCurrentProbe(generation)) return true;
+    if (!this.isCurrentProbe(generation)) return 'failed';
     const after = this.sampleAuthoredTheme();
     if (officialThemeLooksApplied(after)) {
-      this.deactivate();
+      this.pendingOfficialGeneration = null;
       this.setStatus('official-dark', 'official-theme-activated');
-      return true;
+      return 'applied';
     }
     this.releaseOfficialTheme();
     this.officialFailures += 1;
-    return false;
+    return 'failed';
   }
 
   private releaseOfficialTheme(): void {
-    this.mutateAuthoredTheme(() => this.officialTheme.restore());
+    this.pendingOfficialGeneration = null;
+    if (this.officialTheme.isApplied()) {
+      this.mutateAuthoredTheme(() => this.officialTheme.restore());
+    }
   }
 
   private mutateAuthoredTheme(run: () => void): void {
@@ -327,6 +352,9 @@ export class ThemeController {
 
   private cancelPendingProbe(): void {
     this.generation += 1;
+    this.probeAbort?.abort();
+    this.probeAbort = null;
+    if (this.pendingOfficialGeneration !== null) this.releaseOfficialTheme();
     this.clearTimer();
   }
 
@@ -335,18 +363,6 @@ export class ThemeController {
     clearTimeout(this.timer);
     this.timer = null;
   }
-}
-
-function ambiguousConfirmation(
-  first: NativeThemeDecision,
-  second: NativeThemeDecision,
-): NativeThemeDecision {
-  if (second.kind !== 'light') return second;
-  return {
-    kind: 'ambiguous',
-    reason: 'light-theme-probe-was-not-stable',
-    evidence: first.evidence,
-  };
 }
 
 async function settleDocument(): Promise<void> {

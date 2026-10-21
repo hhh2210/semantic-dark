@@ -18,8 +18,9 @@ beside native-dark detection.
 4. Re-sample. Official success requires **visual** dark evidence
    (`dark-rendered-surfaces` or a dark `color-scheme` with dark coverage). A
    root marker we just wrote is not enough.
-5. If the official switch does not darken the page, restore the snapshot and
-   run the Semantic Dark transform (`applied-light`).
+5. If the official switch does not darken the page, undo owned changes and
+   sample the restored page again. Only stable light evidence permits the
+   Semantic Dark transform (`applied-light`).
 6. After two failed official attempts on the same page, skip official
    activation and use the transform lane.
 
@@ -58,7 +59,7 @@ a known root marker even when the light page has no `data-theme=light` yet:
 
 These entries exist so daily-use Chinese sites with first-party dark CSS are
 not inverted on top of that CSS. New seeds must be reversible root markers
-with a restore snapshot, not injected stylesheets. Unknown switches go to the
+with conditional restoration, not injected stylesheets. Unknown switches go to the
 Manus handoff instead of growing this table by guesswork.
 
 ## Status surface
@@ -77,3 +78,29 @@ Manus handoff instead of growing this table by guesswork.
 - It does not relax native-dark thresholds to chase activation rate.
 - It does not treat Darkmode.js mix-blend widgets as official site themes.
 - Visual quality of the transform lane is a separate problem from this gate.
+
+## Ownership and asynchronous changes
+
+Restoration retains references to the original elements. It only undoes changed
+class tokens and attributes/properties that still have the values written by
+this activation. Unrelated SPA classes and replacement html/body/link elements
+are preserved. An attribute or stylesheet resource repurposed by the site is no
+longer overwritten. Identical-value writes by the site cannot be distinguished
+from our own value.
+
+Stylesheet recipes require an authored CSS `stylesheet` link and an explicit
+`disabled` or inert `media` state. Feeds, translations and extension-owned sheets
+are excluded. An unselected alternate stylesheet set may report `disabled=false`;
+selecting such a set changes browser state beyond these reversible properties,
+so it is left to the transform fallback.
+
+Enabled CSS gets up to two seconds to load before visual confirmation. Load,
+error, timeout and cancellation all settle the wait. A cancelled generation
+rolls back its pending activation before a newer generation starts, and cannot
+later roll back that newer theme. Same-mode updates retain pending rechecks.
+Authored changes during CSS settlement are included in the final sample; the
+stylesheet's own load event does not restart activation.
+
+`pnpm e2e` exercises the built extension with the official fixture, SPA root
+changes, alternate CSS/feed links, slow/error/timeout loads and rapid modes in a
+disposable headless profile. Set `CHROME_PATH` to a test Chromium executable.
