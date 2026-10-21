@@ -91,6 +91,45 @@ export async function exerciseOfficialTheme({session, fixtureUrl, fixtureDir, ar
     }, {url, disabled});
   }
   try {
+    await check('late loads of an ineffective owned stylesheet cannot replenish its budget', async () => {
+      await load({markup: stylesheetMarkup, initialMode: 'off'});
+      serve('/slow-inert.css', ':root {--inert-dark-candidate: loaded;}', {delayMs: 2300});
+      await addStylesheet('/slow-inert.css');
+      await mode('auto');
+      await decision('applied-light');
+      await page.waitForTimeout(6000);
+      await decision('applied-light');
+      assert.ok((requestCounts.get('/slow-inert.css') ?? 0) <= 2, 'Late self-loads caused repeated CSS fetches');
+      assert.equal(await page.evaluate(() => document.getElementById('alternate-dark').disabled), true);
+    });
+    for (const source of ['style-node', 'cssom']) {
+      await check(`changed ${source} rules refresh an exhausted root-recipe budget`, async () => {
+        await load({styles: lightCss, initialMode: 'off'});
+        await page.evaluate(() => {
+          globalThis.styleAttempts = 0;
+          new MutationObserver((records) => {
+            globalThis.styleAttempts += records.filter((record) => record.oldValue === 'light').length;
+          }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme'], attributeOldValue: true});
+        });
+        await mode('auto');
+        await decision('applied-light');
+        await page.evaluate(() => document.documentElement.classList.add('route-two'));
+        await page.waitForFunction(() => globalThis.styleAttempts === 2 && document.documentElement.dataset.theme === 'light');
+        await decision('applied-light');
+        await page.evaluate(({source, css}) => {
+          if (source === 'cssom') {
+            const sheet = new CSSStyleSheet();
+            document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+            sheet.replaceSync(css);
+          } else {
+            const style = document.createElement('style'); style.textContent = css; document.head.append(style);
+          }
+        }, {source, css});
+        await decision('official-dark');
+        assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+        assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-semantic-dark-active')), false);
+      });
+    }
     for (const target of ['html', 'body']) {
       await check(`replacement ${target} gets a fresh budget for an identical recipe`, async () => {
         const selector = `${target}:not([data-broken])[data-theme="dark"]`;

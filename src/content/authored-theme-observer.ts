@@ -23,21 +23,22 @@ export class AuthoredThemeObserver {
   private observedBody: HTMLElement | null = null;
   private suspensionDepth = 0;
 
-  constructor(private readonly onChange: () => void) {}
+  constructor(private readonly onChange: (stylesChanged: boolean, loadedStylesheet?: Element) => void) {}
 
   private readonly notifyForLoadedStyle = (event: Event): void => {
     if (this.suspensionDepth > 0 || !this.observer) return;
     if (!(event.target instanceof HTMLLinkElement || event.target instanceof HTMLStyleElement)) return;
     if (!event.target.matches(THEME_NODE_SELECTOR) ||
-      event.target.matches('[data-semantic-dark-sheet]')) return;
-    this.onChange();
+      event.target.closest('[data-semantic-dark-sheet],[data-semantic-dark-ui]')) return;
+    this.onChange(true, event.target);
   };
 
   start(): void {
     this.stop();
     this.observer = new MutationObserver((records) => {
       this.observeThemeContainers();
-      if (records.some(isAuthoredThemeMutation)) this.onChange();
+      const changes = records.filter(isAuthoredThemeMutation);
+      if (changes.length > 0) this.onChange(changes.some(stylesChanged));
     });
     this.observer.observe(document, DOCUMENT_THEME_OPTIONS);
     this.observeThemeContainers();
@@ -122,14 +123,27 @@ function isAuthoredThemeMutation(record: MutationRecord): boolean {
       (record.oldValue ?? '').toLowerCase().split(/\s+/).includes('stylesheet')) return true;
     return record.target instanceof Element && record.target.matches(THEME_NODE_SELECTOR);
   }
-  return [...record.addedNodes, ...record.removedNodes].some(isThemeNode);
+  if (record.target instanceof Element && record.target.matches('style') &&
+    !record.target.closest('[data-semantic-dark-sheet],[data-semantic-dark-ui]')) return true;
+  return [...record.addedNodes, ...record.removedNodes].some((node) => isThemeNode(node));
 }
 
-function isThemeNode(node: Node): boolean {
-  const element = node instanceof Element ? node : node.parentElement;
+function stylesChanged(record: MutationRecord): boolean {
+  if (record.type === 'childList') {
+    if (record.target instanceof Element && record.target.matches('style')) return true;
+    return [...record.addedNodes, ...record.removedNodes].some((node) => isThemeNode(node, false));
+  }
+  return record.type === 'characterData' || record.attributeName === 'style' ||
+    (record.target !== document.documentElement && record.target !== document.body);
+}
+
+function isThemeNode(node: Node, includeContainers = true): boolean {
+  const element = node instanceof Element ? node :
+    includeContainers ? node.parentElement : node.parentElement?.closest('style');
   if (!element || element.closest('[data-semantic-dark-sheet],[data-semantic-dark-ui]')) return false;
-  return element.matches('html,head,body') || element.matches(THEME_NODE_SELECTOR) ||
-    element.querySelector(THEME_NODE_SELECTOR) !== null;
+  return (includeContainers && element.matches('html,head,body')) || element.matches(THEME_NODE_SELECTOR) ||
+    [...element.querySelectorAll(THEME_NODE_SELECTOR)].some((child) =>
+      !child.closest('[data-semantic-dark-sheet],[data-semantic-dark-ui]'));
 }
 
 function authoredInlineStyle(value: string): string {

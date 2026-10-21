@@ -53,6 +53,6 @@ document.addEventListener('semantic-dark:page-style-changed', () => {
   clearTimeout(styleChangeTimer);
   styleChangeTimer = window.setTimeout(() => {
     controller?.rescan();
-    void controller?.recheck();
+    void controller?.recheck(true);
   }, 50);
 });

@@ -126,3 +126,24 @@ it('ignores unrelated body metadata and extension-owned style text', async () =>
     expect(changed).not.toHaveBeenCalled();
   } finally { container.remove(); document.body.removeAttribute('title'); }
 });
+
+it('distinguishes style invalidation from unrelated root-class and body text changes', async () => {
+  const {changed} = setup();
+  document.body.classList.add('route');
+  await tick();
+  expect(changed).toHaveBeenLastCalledWith(false);
+  const style = document.createElement('style');
+  style.textContent = 'body {color:white}';
+  document.body.append(style);
+  await tick();
+  expect(changed).toHaveBeenLastCalledWith(true);
+  style.textContent = '';
+  await tick();
+  expect(changed).toHaveBeenLastCalledWith(true);
+  const text = document.createTextNode('body text');
+  document.body.append(text);
+  await tick();
+  expect(changed).toHaveBeenLastCalledWith(false);
+  text.remove();
+  style.remove();
+});

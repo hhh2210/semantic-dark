@@ -101,6 +101,8 @@ variant is retained. A newly added or repurposed link gets a fresh failure budge
 relevant source attribute/token values also key the budget, so replacement SPA
 roots get a fresh attempt. Stylesheet metadata and style text are observed across
 the document, including links under body, while unrelated body mutations are ignored.
+Author stylesheet changes (including CSSOM edits) and returning to automatic mode
+refresh failed evidence; ordinary root-class changes still respect the retry limit.
 
 Enabled CSS gets up to two seconds to load before visual confirmation. Load,
 error, timeout and cancellation all settle the wait. A cancelled generation

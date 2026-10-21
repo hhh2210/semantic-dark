@@ -48,6 +48,7 @@ export class ThemeController {
   private readonly officialTheme: OfficialThemeLaneLike;
   private officialFailures = 0;
   private officialRecipeKeys: Array<string | Element> = [];
+  private officialStylesheetLoads = new WeakSet<Element>();
 
   constructor(
     config: ThemeConfig,
@@ -78,13 +79,16 @@ export class ThemeController {
   async update(config: ThemeConfig): Promise<void> {
     const previousMode = this.config.mode;
     this.config = normalizeThemeConfig(config);
+    if (previousMode !== this.config.mode && this.config.mode === 'auto') this.officialFailures = 0;
     const interrupted = this.probeAbort !== null || this.timer !== null;
     this.cancelPendingProbe();
     if (!this.started) return;
     await this.reconcile(previousMode !== this.config.mode || interrupted);
   }
 
-  async recheck(): Promise<void> {
+  async recheck(stylesChanged = false): Promise<void> {
+    if (stylesChanged && this.pendingOfficialGeneration !== null) return;
+    if (stylesChanged) this.officialFailures = 0;
     if (!this.started || this.config.mode !== 'auto') return;
     if (this.pauseForSystemLight()) return;
     await this.probe();
@@ -108,6 +112,7 @@ export class ThemeController {
     this.releaseOfficialTheme();
     this.officialFailures = 0;
     this.officialRecipeKeys = [];
+    this.officialStylesheetLoads = new WeakSet();
   }
 
   private async reconcile(modeChanged: boolean): Promise<void> {
@@ -137,7 +142,8 @@ export class ThemeController {
 
   private startDetector(): void {
     if (this.detectorRunning) return;
-    this.detector.start(() => this.handleDetectorChange());
+    this.detector.start((stylesChanged, loadedStylesheet) =>
+      this.handleDetectorChange(stylesChanged, loadedStylesheet));
     this.detectorRunning = true;
   }
 
@@ -147,8 +153,13 @@ export class ThemeController {
     this.detectorRunning = false;
   }
 
-  private handleDetectorChange(): void {
+  private handleDetectorChange(stylesChanged = false, loadedStylesheet?: Element): void {
     if (!this.started || this.config.mode !== 'auto') return;
+    // A late load of our own failed CSS may recheck, but must not renew its budget.
+    if (stylesChanged && this.pendingOfficialGeneration === null &&
+      (!loadedStylesheet || !this.officialStylesheetLoads.has(loadedStylesheet))) {
+      this.officialFailures = 0;
+    }
     if (this.pauseForSystemLight()) return;
     // The in-flight confirmation will sample these changes after CSS settles.
     // Restarting on its own stylesheet load would roll back and re-enable it.
@@ -251,6 +262,9 @@ export class ThemeController {
       // The previous candidate may have overlapped a site/SPA theme change.
       if (index > 0 && this.sampleAuthoredTheme().kind !== 'light') return 'failed';
       this.pendingOfficialGeneration = generation;
+      for (const recipe of recipes) {
+        if (recipe.type === 'stylesheet') this.officialStylesheetLoads.add(recipe.link);
+      }
       this.mutateAuthoredTheme(() => this.officialTheme.activate(recipes));
       if (!this.officialTheme.isApplied()) {
         this.pendingOfficialGeneration = null;

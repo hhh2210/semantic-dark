@@ -36,7 +36,7 @@ const MEDIA_SELECTOR = 'img,video,canvas,svg,iframe,object,embed';
 export interface NativeThemeDetectorLike {
   prefersDark(): boolean;
   sample(): NativeThemeDecision;
-  start(onChange: () => void): void;
+  start(onChange: (stylesChanged?: boolean, loadedStylesheet?: Element) => void): void;
   stop(): void;
   withSuppressedAuthoredChanges?(run: () => void): void;
 }
@@ -45,7 +45,7 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
   private authoredThemeObserver: AuthoredThemeObserver | null = null;
   private darkPreference: MediaQueryList | null = null;
   private forcedColors: MediaQueryList | null = null;
-  private onChange: (() => void) | null = null;
+  private onChange: ((stylesChanged?: boolean, loadedStylesheet?: Element) => void) | null = null;
 
   private readonly notify = (): void => { this.onChange?.(); };
   private readonly notifyWhenVisible = (): void => {
@@ -73,7 +73,7 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
     });
   }
 
-  start(onChange: () => void): void {
+  start(onChange: (stylesChanged?: boolean, loadedStylesheet?: Element) => void): void {
     this.stop();
     this.onChange = onChange;
     this.darkPreference = safeMatchMedia('(prefers-color-scheme: dark)');
@@ -81,7 +81,8 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
     this.darkPreference?.addEventListener('change', this.notify);
     this.forcedColors?.addEventListener('change', this.notify);
 
-    this.authoredThemeObserver = new AuthoredThemeObserver(this.notify);
+    this.authoredThemeObserver = new AuthoredThemeObserver((stylesChanged, loadedStylesheet) =>
+      this.onChange?.(stylesChanged, loadedStylesheet));
     this.authoredThemeObserver.start();
     document.addEventListener('visibilitychange', this.notifyWhenVisible);
     window.addEventListener('pageshow', this.notify);

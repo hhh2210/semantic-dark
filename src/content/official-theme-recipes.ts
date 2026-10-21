@@ -71,17 +71,21 @@ export function officialThemeCandidates(probe: OfficialThemeProbe): OfficialThem
 
 /** Snapshot resource fields as well as identity: a link can be repurposed in place. */
 export function officialThemeRecipeKeys(probe: OfficialThemeProbe): Array<string | Element> {
-  return probe.recipes.flatMap((recipe): Array<string | Element> => {
-    if (recipe.type === 'stylesheet') {
-      return [recipe.link, JSON.stringify([recipe.link.href, recipe.link.title, recipe.link.rel,
-        recipe.link.type, recipe.link.disabled, recipe.link.media, recipe.disabled, recipe.media])];
-    }
-    const target = probe.targets[recipe.target];
-    const source = recipe.type === 'attribute' ? target?.getAttribute(recipe.name) :
-      [...new Set([...recipe.add, ...(recipe.remove ?? [])])].sort()
-        .map((token) => [token, target?.classList.contains(token)]);
-    return [target ?? recipe.target, JSON.stringify([recipeKey(recipe), source])];
-  });
+  return [
+    probe.targets.html ?? 'html-missing',
+    probe.targets.body ?? 'body-missing',
+    ...probe.recipes.flatMap((recipe): Array<string | Element> => {
+      if (recipe.type === 'stylesheet') {
+        return [recipe.link, JSON.stringify([recipe.link.href, recipe.link.title, recipe.link.rel,
+          recipe.link.type, recipe.link.disabled, recipe.link.media, recipe.disabled, recipe.media])];
+      }
+      const target = probe.targets[recipe.target];
+      const source = recipe.type === 'attribute' ? target?.getAttribute(recipe.name) :
+        [...new Set([...recipe.add, ...(recipe.remove ?? [])])].sort()
+          .map((token) => [token, target?.classList.contains(token)]);
+      return [target ?? recipe.target, JSON.stringify([recipeKey(recipe), source])];
+    }),
+  ];
 }
 
 /** Official success needs visual dark, not only a marker we just wrote. */

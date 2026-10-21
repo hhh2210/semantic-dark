@@ -51,7 +51,7 @@ function markerOnlyNativeDark(): NativeThemeDecision {
 }
 
 class FakeDetector implements NativeThemeDetectorLike {
-  private change: (() => void) | null = null;
+  private change: ((stylesChanged?: boolean, loadedStylesheet?: Element) => void) | null = null;
   private dark = true;
   readonly samples: NativeThemeDecision[];
   readonly activeMarkers: boolean[] = [];
@@ -66,9 +66,9 @@ class FakeDetector implements NativeThemeDetectorLike {
     return this.samples.shift() ?? result('ambiguous');
   }
 
-  start(onChange: () => void): void { this.change = onChange; }
+  start(onChange: (stylesChanged?: boolean, loadedStylesheet?: Element) => void): void { this.change = onChange; }
   stop(): void { this.change = null; }
-  emit(): void { this.change?.(); }
+  emit(stylesChanged = false, loadedStylesheet?: Element): void { this.change?.(stylesChanged, loadedStylesheet); }
   setSystemDark(dark: boolean): void {
     this.dark = dark;
     this.emit();
@@ -694,5 +694,85 @@ it('resets the budget when a root attribute source state changes without changin
   } finally {
     controller.stop();
     document.documentElement.removeAttribute('data-theme');
+  }
+});
+
+it.each(['observer', 'cssom', 'mode-change'] as const)('retries unchanged recipes after %s invalidates old style evidence', async (source) => {
+  const official = new FakeOfficial();
+  const detector = new FakeDetector(...Array.from({length: 12}, () => result('light')));
+  const {controller} = harness('auto', detector, async () => {}, official);
+  await controller.start();
+  await controller.recheck();
+  await controller.recheck();
+  expect(official.activates).toBe(2);
+  detector.samples.push(result('light'), result('light'), result('native-dark'));
+  if (source === 'observer') {
+    detector.emit(true);
+    await until(() => controller.getStatus().decision === 'official-dark');
+  } else if (source === 'cssom') {
+    await controller.recheck(true);
+  } else {
+    await controller.update(config('off'));
+    await controller.update(config('auto'));
+  }
+  expect(official.activates).toBe(3);
+  expect(controller.getStatus().decision).toBe('official-dark');
+  controller.stop();
+});
+
+it('rechecks late owned stylesheet loads without resetting their exhausted budget', async () => {
+  const official = new FakeOfficial();
+  const recipe = sheetRecipe('/slow-inert.css');
+  official.recipes = [recipe];
+  const detector = new FakeDetector(...Array.from({length: 14}, () => result('light')));
+  const {controller} = harness('auto', detector, async () => {}, official);
+  await controller.start();
+  await controller.recheck();
+  await controller.recheck();
+  expect(official.activates).toBe(2);
+  detector.emit(true, recipe.link);
+  await until(() => controller.getStatus().decision === 'applied-light');
+  expect(official.activates).toBe(2);
+  detector.samples.push(result('light'), result('light'), result('native-dark'));
+  detector.emit(true, document.createElement('link'));
+  await until(() => controller.getStatus().decision === 'official-dark');
+  expect(official.activates).toBe(3);
+  controller.stop();
+});
+
+it('lets pending confirmation absorb CSSOM changes without restart loops', async () => {
+  const official = new WaitingOfficial();
+  const {controller} = harness('auto', new FakeDetector(
+    result('light'), result('light'), result('native-dark'),
+  ), async () => {}, official);
+  const starting = controller.start();
+  await until(() => official.waits.length === 1);
+  await controller.recheck(true);
+  expect(official.activates).toBe(1);
+  expect(official.restores).toBe(0);
+  official.waits[0]!.resolve();
+  await starting;
+  expect(controller.getStatus().decision).toBe('official-dark');
+  controller.stop();
+});
+
+it('treats a new body as fresh evidence even for an html-owned recipe', async () => {
+  const official = new FakeOfficial();
+  const detector = new FakeDetector(...Array.from({length: 12}, () => result('light')));
+  const {controller} = harness('auto', detector, async () => {}, official);
+  await controller.start();
+  await controller.recheck();
+  await controller.recheck();
+  expect(official.activates).toBe(2);
+  const old = document.body;
+  const replacement = document.createElement('body');
+  old.replaceWith(replacement);
+  try {
+    detector.samples.push(result('light'), result('light'), result('native-dark'));
+    await controller.recheck();
+    expect(official.activates).toBe(3);
+    expect(controller.getStatus().decision).toBe('official-dark');
+  } finally {
+    controller.stop(); replacement.replaceWith(old);
   }
 });
