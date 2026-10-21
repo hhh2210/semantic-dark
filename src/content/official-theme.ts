@@ -1,4 +1,4 @@
-import {isStylesheetLink, probeOfficialTheme, type OfficialThemeProbe, type OfficialThemeRecipe} from './official-theme-recipes';
+import {isStylesheetLink, officialThemeCandidates, probeOfficialTheme, type OfficialThemeProbe, type OfficialThemeRecipe} from './official-theme-recipes';
 
 export {
   officialThemeLooksApplied,
@@ -9,7 +9,7 @@ export {
 
 export interface OfficialThemeLaneLike {
   probe(): OfficialThemeProbe;
-  activate(): boolean;
+  activate(recipes?: readonly OfficialThemeRecipe[]): boolean;
   settle?(signal: AbortSignal): Promise<void>;
   restore(): void;
   isApplied(): boolean;
@@ -39,13 +39,13 @@ export class OfficialThemeLane implements OfficialThemeLaneLike {
     return probeOfficialTheme(this.documentRef, this.hostname());
   }
 
-  activate(): boolean {
+  activate(recipes?: readonly OfficialThemeRecipe[]): boolean {
     this.restore();
-    const probe = this.probe();
-    if (probe.recipes.length === 0) return false;
+    const candidate = recipes ?? officialThemeCandidates(this.probe())[0] ?? [];
+    if (candidate.length === 0) return false;
     const session: OfficialThemeSession = {undo: [], stylesheets: []};
     this.session = session;
-    for (const recipe of probe.recipes) this.applyMutation(recipe, session);
+    for (const recipe of candidate) this.applyMutation(recipe, session);
     return true;
   }
 

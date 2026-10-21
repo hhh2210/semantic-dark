@@ -4,6 +4,7 @@ import type {
   NativeThemeDetectorLike,
   NativeThemeKind,
 } from '../../src/content/native-dark';
+import type {OfficialThemeRecipe} from '../../src/content/official-theme-recipes';
 import type {OfficialThemeLaneLike, OfficialThemeProbe} from '../../src/content/official-theme';
 import {
   ThemeController,
@@ -79,17 +80,20 @@ class FakeOfficial implements OfficialThemeLaneLike {
   activateResult = true;
   restores = 0;
   activates = 0;
+  recipes: OfficialThemeRecipe[] = [{type: 'attribute', target: 'html', name: 'data-theme', value: 'dark'}];
+  readonly attempted: Array<readonly OfficialThemeRecipe[]> = [];
 
   probe(): OfficialThemeProbe {
     return {
       capable: this.activateResult,
       source: this.activateResult ? 'catalog' : 'none',
       catalogId: this.activateResult ? 'zhihu' : null,
-      recipes: [],
+      recipes: this.activateResult ? this.recipes : [],
     };
   }
 
-  activate(): boolean {
+  activate(recipes: readonly OfficialThemeRecipe[] = []): boolean {
+    this.attempted.push(recipes);
     this.activates += 1;
     this.applied = this.activateResult;
     return this.activateResult;
@@ -548,4 +552,102 @@ it('resets consecutive official failures after successful SPA recovery', async (
   } finally {
     controller.stop();
   }
+});
+
+function sheetRecipe(href: string): Extract<OfficialThemeRecipe, {type: 'stylesheet'}> {
+  const link = document.createElement('link');
+  link.href = href;
+  link.rel = 'alternate stylesheet';
+  link.title = `Dark ${href}`;
+  link.disabled = true;
+  return {type: 'stylesheet', link, disabled: false, media: 'all'};
+}
+
+it.each(['new link', 'changed URL'])('retries after exhausted failures when a %s changes the candidates', async (change) => {
+  const official = new FakeOfficial();
+  const first = sheetRecipe('/failed.css');
+  official.recipes = [first];
+  const detector = new FakeDetector(...Array.from({length: 12}, () => result('light')));
+  const {controller} = harness('auto', detector, async () => {}, official);
+  await controller.start();
+  await controller.recheck();
+  await controller.recheck();
+  expect(official.activates).toBe(2);
+  if (change === 'new link') official.recipes = [sheetRecipe('/working.css')];
+  else first.link.href = '/working.css';
+  detector.samples.push(result('light'), result('light'), result('native-dark'));
+  await controller.recheck();
+  expect(official.activates).toBe(3);
+  expect(controller.getStatus().decision).toBe('official-dark');
+  controller.stop();
+});
+
+it('rolls back an ineffective stylesheet before trying a second variant', async () => {
+  const official = new FakeOfficial();
+  const first = sheetRecipe('/first.css');
+  const second = sheetRecipe('/second.css');
+  official.recipes = [first, second];
+  const {controller} = harness('auto', new FakeDetector(
+    result('light'), result('light'), result('light'), result('light'), result('native-dark'),
+  ), async () => {}, official);
+  await controller.start();
+  expect(official.attempted).toEqual([[first], [second]]);
+  expect(official.restores).toBe(1);
+  expect(controller.getStatus().decision).toBe('official-dark');
+  controller.stop();
+});
+
+it('does not try another stylesheet over a concurrent native theme after rollback', async () => {
+  const official = new FakeOfficial();
+  official.recipes = [sheetRecipe('/first.css'), sheetRecipe('/second.css')];
+  const {controller, dom} = harness('auto', new FakeDetector(
+    result('light'), result('light'), result('light'), result('native-dark'), result('native-dark'),
+  ), async () => {}, official);
+  await controller.start();
+  expect(official.activates).toBe(1);
+  expect(official.applied).toBe(false);
+  expect(controller.getStatus().decision).toBe('native-dark');
+  expect(dom.enabled).toEqual([]);
+  controller.stop();
+});
+
+it('cancels settlement of a later stylesheet candidate without retaining either variant', async () => {
+  const official = new WaitingOfficial();
+  official.recipes = [sheetRecipe('/first.css'), sheetRecipe('/second.css')];
+  const {controller} = harness('auto', new FakeDetector(
+    result('light'), result('light'), result('light'), result('light'),
+  ), async () => {}, official);
+  const starting = controller.start();
+  await until(() => official.waits.length === 1);
+  official.waits[0]!.resolve();
+  await until(() => official.waits.length === 2);
+  await controller.update(config('off'));
+  expect(official.applied).toBe(false);
+  expect(official.signals[1]?.aborted).toBe(true);
+  official.waits[1]!.resolve();
+  await starting;
+  expect(controller.getStatus().decision).toBe('user-off');
+  controller.stop();
+});
+
+it('re-probes changed candidates after an async failure instead of activating a stale variant', async () => {
+  const official = new WaitingOfficial();
+  const first = sheetRecipe('/first.css');
+  const stale = sheetRecipe('/stale.css');
+  const replacement = sheetRecipe('/replacement.css');
+  official.recipes = [first, stale];
+  const {controller} = harness('auto', new FakeDetector(
+    result('light'), result('light'), result('light'), result('light'), result('light'), result('native-dark'),
+  ), async () => {}, official);
+  const starting = controller.start();
+  await until(() => official.waits.length === 1);
+  official.recipes = [replacement];
+  official.waits[0]!.resolve();
+  await starting;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await until(() => official.waits.length === 2);
+  expect(official.attempted).toEqual([[first], [replacement]]);
+  official.waits[1]!.resolve();
+  await until(() => controller.getStatus().decision === 'official-dark');
+  controller.stop();
 });

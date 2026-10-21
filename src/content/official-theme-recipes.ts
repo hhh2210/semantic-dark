@@ -49,6 +49,32 @@ export function probeOfficialTheme(root: Document, host: string): OfficialThemeP
   };
 }
 
+/** Root contracts can cooperate; alternative CSS variants must not be combined. */
+export function officialThemeCandidates(probe: OfficialThemeProbe): OfficialThemeRecipe[][] {
+  const roots = probe.recipes.filter((recipe) => recipe.type !== 'stylesheet');
+  const stylesheets = new Map<string | HTMLLinkElement, OfficialThemeRecipe[]>();
+  for (const recipe of probe.recipes) {
+    if (recipe.type !== 'stylesheet') continue;
+    // A named style-sheet set may consist of several files with the same title.
+    const key = recipe.link.title.trim() ? recipe.link.title : recipe.link;
+    const group = stylesheets.get(key) ?? [];
+    group.push(recipe);
+    stylesheets.set(key, group);
+  }
+  return [
+    ...(roots.length ? [roots] : []),
+    ...[...stylesheets.values()].map((group) => [...roots, ...group]),
+  ];
+}
+
+/** Snapshot resource fields as well as identity: a link can be repurposed in place. */
+export function officialThemeRecipeKeys(probe: OfficialThemeProbe): Array<string | HTMLLinkElement> {
+  return probe.recipes.flatMap((recipe) => recipe.type === 'stylesheet'
+    ? [recipe.link, JSON.stringify([recipe.link.href, recipe.link.title, recipe.link.rel,
+      recipe.link.type, recipe.link.disabled, recipe.link.media, recipe.disabled, recipe.media])]
+    : [recipeKey(recipe)]);
+}
+
 /** Official success needs visual dark, not only a marker we just wrote. */
 export function officialThemeLooksApplied(decision: NativeThemeDecision): boolean {
   if (decision.kind !== 'native-dark') return false;

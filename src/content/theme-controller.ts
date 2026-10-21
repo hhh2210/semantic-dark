@@ -8,6 +8,7 @@ import type {NativeThemeDecision, NativeThemeDetectorLike} from './native-dark';
 import {beginDocumentTransitionGuard, endDocumentTransitionGuard, flushDocumentStyle}
   from './dom-style-contract';
 import {OfficialThemeLane, officialThemeLooksApplied, type OfficialThemeLaneLike} from './official-theme';
+import {officialThemeCandidates, officialThemeRecipeKeys} from './official-theme-recipes';
 const ACTIVE_ATTRIBUTE = 'data-semantic-dark-active';
 const MAX_OFFICIAL_ATTEMPTS = 2;
 
@@ -46,6 +47,7 @@ export class ThemeController {
   private status: PageThemeStatus;
   private readonly officialTheme: OfficialThemeLaneLike;
   private officialFailures = 0;
+  private officialRecipeKeys: Array<string | HTMLLinkElement> = [];
 
   constructor(
     config: ThemeConfig,
@@ -105,6 +107,7 @@ export class ThemeController {
     this.deactivate();
     this.releaseOfficialTheme();
     this.officialFailures = 0;
+    this.officialRecipeKeys = [];
   }
 
   private async reconcile(modeChanged: boolean): Promise<void> {
@@ -235,31 +238,50 @@ export class ThemeController {
     generation: number,
     signal: AbortSignal,
   ): Promise<'unavailable' | 'applied' | 'failed'> {
-    if (this.officialFailures >= MAX_OFFICIAL_ATTEMPTS || !this.officialTheme.probe().capable) {
-      return 'unavailable';
-    }
-    this.deactivate();
-    this.pendingOfficialGeneration = generation;
-    this.mutateAuthoredTheme(() => this.officialTheme.activate());
-    if (!this.officialTheme.isApplied()) {
-      this.pendingOfficialGeneration = null;
-      return 'unavailable';
-    }
-    await this.officialTheme.settle?.(signal);
-    if (!this.isCurrentProbe(generation)) return 'failed';
-    flushDocumentStyle(document.documentElement);
-    await this.stableDelay();
-    if (!this.isCurrentProbe(generation)) return 'failed';
-    const after = this.sampleAuthoredTheme();
-    if (officialThemeLooksApplied(after)) {
+    const probe = this.officialTheme.probe();
+    const keys = officialThemeRecipeKeys(probe);
+    if (!this.sameOfficialRecipes(keys)) {
       this.officialFailures = 0;
-      this.pendingOfficialGeneration = null;
-      this.setStatus('official-dark', 'official-theme-activated');
-      return 'applied';
+      this.officialRecipeKeys = keys;
     }
-    this.releaseOfficialTheme();
+    if (this.officialFailures >= MAX_OFFICIAL_ATTEMPTS || !probe.capable) return 'unavailable';
+    this.deactivate();
+    const candidates = officialThemeCandidates(probe);
+    for (const [index, recipes] of candidates.entries()) {
+      // The previous candidate may have overlapped a site/SPA theme change.
+      if (index > 0 && this.sampleAuthoredTheme().kind !== 'light') return 'failed';
+      this.pendingOfficialGeneration = generation;
+      this.mutateAuthoredTheme(() => this.officialTheme.activate(recipes));
+      if (!this.officialTheme.isApplied()) {
+        this.pendingOfficialGeneration = null;
+        continue;
+      }
+      await this.officialTheme.settle?.(signal);
+      if (!this.isCurrentProbe(generation)) return 'failed';
+      flushDocumentStyle(document.documentElement);
+      await this.stableDelay();
+      if (!this.isCurrentProbe(generation)) return 'failed';
+      const after = this.sampleAuthoredTheme();
+      if (officialThemeLooksApplied(after)) {
+        this.officialFailures = 0;
+        this.pendingOfficialGeneration = null;
+        this.setStatus('official-dark', 'official-theme-activated');
+        return 'applied';
+      }
+      this.releaseOfficialTheme();
+      if (!this.sameOfficialRecipes(officialThemeRecipeKeys(this.officialTheme.probe()))) {
+        // Re-probe a changed SPA contract instead of applying a stale candidate.
+        this.handleDetectorChange();
+        return 'failed';
+      }
+    }
     this.officialFailures += 1;
     return 'failed';
+  }
+
+  private sameOfficialRecipes(keys: readonly (string | HTMLLinkElement)[]): boolean {
+    return keys.length === this.officialRecipeKeys.length &&
+      keys.every((key, index) => key === this.officialRecipeKeys[index]);
   }
 
   private releaseOfficialTheme(): void {

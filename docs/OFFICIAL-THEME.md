@@ -21,8 +21,8 @@ beside native-dark detection.
 5. If the official switch does not darken the page, undo owned changes and
    sample the restored page again. Only stable light evidence permits the
    Semantic Dark transform (`applied-light`).
-6. After two consecutive failed official attempts on the same page, skip official
-   activation and use the transform lane. Visual success resets the failure budget.
+6. After two unsuccessful passes over unchanged candidates, use the transform
+   lane. Visual success or a changed candidate set resets the failure budget.
 
 Manual force-on restores any official mutation first, then applies the
 transform. System light and site disable restore it as well.
@@ -93,6 +93,11 @@ Stylesheet recipes require an authored CSS `stylesheet` link and an explicit
 are excluded. An unselected alternate stylesheet set may report `disabled=false`;
 selecting such a set changes browser state beyond these reversible properties,
 so it is left to the transform fallback.
+
+Root-only activation is tried first. Stylesheet variants are then tried one at a
+time (files with the same title form one variant), restoring each failed
+candidate before the next; only the visually confirmed
+variant is retained. A newly added or repurposed link gets a fresh failure budget.
 
 Enabled CSS gets up to two seconds to load before visual confirmation. Load,
 error, timeout and cancellation all settle the wait. A cancelled generation

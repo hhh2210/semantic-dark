@@ -91,6 +91,57 @@ export async function exerciseOfficialTheme({session, fixtureUrl, fixtureDir, ar
     }, {url, disabled});
   }
   try {
+    for (const firstWorks of [true, false]) {
+      await check(`dark variants stay exclusive; first candidate works=${firstWorks}`, async () => {
+        await load({markup: stylesheetMarkup, initialMode: 'off'});
+        serve('/variant-a.css', (firstWorks ? darkCss : '') + ':root {--variant-a: active;}');
+        serve('/variant-c.css', ':root {--variant-c: active;}');
+        serve('/variant-b.css', darkCss + ':root {--variant-b: active;}');
+        await page.evaluate(() => {
+          for (const [id, title] of [['a', 'Dark'], ['c', 'Dark'], ['b', 'Dark High Contrast']]) {
+            const link = document.createElement('link');
+            link.id = `variant-${id}`; link.rel = 'alternate stylesheet';
+            link.title = title; link.href = `/variant-${id}.css`; link.disabled = true;
+            document.head.append(link);
+          }
+        });
+        await mode('auto');
+        await decision('official-dark');
+        assert.deepEqual(await page.evaluate(() => ({
+          disabled: ['a', 'c', 'b'].map((id) => document.getElementById(`variant-${id}`).disabled),
+          a: getComputedStyle(document.documentElement).getPropertyValue('--variant-a').trim(),
+          b: getComputedStyle(document.documentElement).getPropertyValue('--variant-b').trim(),
+          c: getComputedStyle(document.documentElement).getPropertyValue('--variant-c').trim(),
+        })), firstWorks ? {disabled: [false, false, true], a: 'active', b: '', c: 'active'} :
+          {disabled: [true, true, false], a: '', b: 'active', c: ''});
+        await mode('off');
+        await decision('user-off');
+        assert.deepEqual(await page.evaluate(() => ['a', 'c', 'b'].map((id) => document.getElementById(`variant-${id}`).disabled)), [true, true, true]);
+      });
+    }
+    await check('a new stylesheet is tried after the old candidate exhausts its failure budget', async () => {
+      await load({styles: lightCss, initialMode: 'off'});
+      await page.evaluate(() => {
+        globalThis.failedMarkerAttempts = 0;
+        const observer = new MutationObserver((records) => {
+          globalThis.failedMarkerAttempts += records.filter((record) => record.oldValue === 'light').length;
+        });
+        observer.observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme'], attributeOldValue: true});
+      });
+      await mode('auto');
+      await decision('applied-light');
+      await page.evaluate(() => document.documentElement.classList.add('route-two'));
+      await page.waitForFunction(() => globalThis.failedMarkerAttempts === 2 && document.documentElement.dataset.theme === 'light');
+      await decision('applied-light');
+      await page.evaluate(() => document.documentElement.classList.add('route-three'));
+      await decision('applied-light');
+      assert.equal(await page.evaluate(() => globalThis.failedMarkerAttempts), 2);
+      serve('/new-candidate.css', darkCss);
+      await addStylesheet('/new-candidate.css');
+      await decision('official-dark');
+      assert.equal(await page.evaluate(() => document.getElementById('alternate-dark').disabled), false);
+      assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-semantic-dark-active')), false);
+    });
     await check('prototype keys remain untouched through fallback', async () => {
       await load({markup: html.replace('data-theme="light"', 'data-theme="constructor" class="constructor __proto__"')});
       await decision('applied-light');
