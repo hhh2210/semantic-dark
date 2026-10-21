@@ -21,8 +21,8 @@ beside native-dark detection.
 5. If the official switch does not darken the page, undo owned changes and
    sample the restored page again. Only stable light evidence permits the
    Semantic Dark transform (`applied-light`).
-6. After two failed official attempts on the same page, skip official
-   activation and use the transform lane.
+6. After two consecutive failed official attempts on the same page, skip official
+   activation and use the transform lane. Visual success resets the failure budget.
 
 Manual force-on restores any official mutation first, then applies the
 transform. System light and site disable restore it as well.

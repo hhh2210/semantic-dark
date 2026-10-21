@@ -44,6 +44,7 @@ const CONFIG = {
   timeout: 15_000,
   routes: new Map([
     ['/', ['index.html', 'text/html; charset=utf-8']],
+    ['/favicon.ico', (_request, response) => { response.writeHead(204); response.end(); }],
     ['/index.html', ['index.html', 'text/html; charset=utf-8']],
     ['/fixture.css', ['fixture.css', 'text/css; charset=utf-8']],
     ['/icon.svg', ['icon.svg', 'image/svg+xml; charset=utf-8']],
@@ -70,10 +71,13 @@ async function main() {
   let session;
   console.error(`Disposable E2E profile: ${profilePath}`);
   let deadline;
+  const abort = new AbortController();
+  const overallTimeout = Number(process.env.E2E_TIMEOUT_MS ?? 120_000);
 
   const run = async () => {
     const baseline = await captureBaseline({
       ...CONFIG,
+      signal: abort.signal,
       url: fixture.url,
       screenshotPath: beforePath,
       readState: readPageState,
@@ -82,6 +86,7 @@ async function main() {
 
     session = await openExtensionSession({
       ...CONFIG,
+      signal: abort.signal,
       profilePath,
       url: fixture.url,
       colorScheme: 'dark',
@@ -240,7 +245,7 @@ async function main() {
     await session.page.emulateMedia({colorScheme: 'dark'});
 
     const officialRegression = await exerciseOfficialTheme({
-      session, fixtureUrl: fixture.url, fixtureDir: CONFIG.fixtureDir, routes: CONFIG.routes, timeout: CONFIG.timeout,
+      session, fixtureUrl: fixture.url, fixtureDir: CONFIG.fixtureDir, artifactDir: CONFIG.artifactDir, routes: CONFIG.routes, timeout: CONFIG.timeout,
     });
 
     const [beforeStats, afterStats, popupLightStats, popupDarkStats, popupNativeStats, popupOfficialStats] =
@@ -313,15 +318,22 @@ async function main() {
       pageErrors: session.pageErrors,
     }, null, 2));
   };
+  const running = run();
   try {
-    await Promise.race([run(), new Promise((_, reject) => {
-      deadline = setTimeout(() => reject(new Error('E2E exceeded 120 seconds')), 120_000);
+    await Promise.race([running, new Promise((_, reject) => {
+      deadline = setTimeout(() => reject(new Error(`E2E exceeded ${overallTimeout} milliseconds`)), overallTimeout);
     })]);
   } finally {
     clearTimeout(deadline);
-    await session?.close();
-    await fixture.close();
-    await rm(profilePath, {recursive: true, force: true});
+    abort.abort(new Error('E2E finished or timed out'));
+    // Await late browser acquisition/closure before deleting its profile.
+    await running.catch(() => {});
+    try {
+      await session?.close();
+    } finally {
+      await fixture.close();
+      await rm(profilePath, {recursive: true, force: true});
+    }
     console.error(`Removed E2E profile: ${profilePath}`);
   }
 }

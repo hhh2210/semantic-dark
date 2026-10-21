@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 
 /** Exercise the built extension, real CSS loading and its public message/status API. */
-export async function exerciseOfficialTheme({session, fixtureUrl, fixtureDir, routes, timeout}) {
+export async function exerciseOfficialTheme({session, fixtureUrl, fixtureDir, artifactDir, routes, timeout}) {
   const {page, context} = session;
   const worker = context.serviceWorkers().find((item) => item.url() === session.serviceWorkerUrl);
   assert.ok(worker);
@@ -91,6 +91,89 @@ export async function exerciseOfficialTheme({session, fixtureUrl, fixtureDir, ro
     }, {url, disabled});
   }
   try {
+    await check('prototype keys remain untouched through fallback', async () => {
+      await load({markup: html.replace('data-theme="light"', 'data-theme="constructor" class="constructor __proto__"')});
+      await decision('applied-light');
+      assert.deepEqual(await page.evaluate(() => [document.documentElement.dataset.theme,
+        document.documentElement.className]), ['constructor', 'constructor __proto__']);
+      await mode('off');
+      await decision('user-off');
+      assert.deepEqual(await page.evaluate(() => [document.documentElement.dataset.theme,
+        document.documentElement.className]), ['constructor', 'constructor __proto__']);
+    });
+    await check('successful official recovery survives repeated SPA route changes', async () => {
+      await load();
+      await decision('official-dark');
+      for (let route = 0; route < 3; route += 1) {
+        await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+        await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark', undefined, {timeout});
+        await decision('official-dark');
+      }
+    });
+    for (const [attribute, initial, applied] of [['dark', 'false', 'true'], ['data-theme', 'day', 'night']]) {
+      await check(`sparse official theme confirms ${attribute}=${applied}`, async () => {
+        const selector = `:root[${attribute}="${applied}"]`;
+        const markup = `<!doctype html><html ${attribute}="${initial}"><head><link rel="icon" href="data:,">
+          <link rel="stylesheet" href="/official-theme.css"></head><body>
+          <div class="unknown"></div><main id="safe">Sparse authored content</main><div class="unknown"></div>
+          </body></html>`;
+        const styles = `html,body {margin:0;min-height:100vh;background:white;color:#111;color-scheme:light;}
+          body {display:grid;grid-template-columns:1fr 1fr 1fr;} #safe {background:white;color:#111;}
+          .unknown {background-image:url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>');}
+          ${selector}, ${selector} body, ${selector} #safe {background:#111;color:white;}`;
+        await load({markup, styles});
+        await decision('official-dark');
+        assert.equal(await page.evaluate((name) => document.documentElement.getAttribute(name), attribute), applied);
+        assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#safe')).backgroundColor), 'rgb(17, 17, 17)');
+        assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-semantic-dark-active')), false);
+      });
+    }
+    await check('duplicate stylesheet URLs preserve screen and print scopes', async () => {
+      await load({markup: stylesheetMarkup, initialMode: 'off'});
+      serve('/duplicate-dark.css', darkCss);
+      await page.evaluate(() => {
+        for (const [index, media] of ['none', 'print', 'print'].entries()) {
+          const link = document.createElement('link');
+          link.id = `duplicate-${index}`;
+          link.rel = 'stylesheet'; link.title = 'Dark'; link.href = '/duplicate-dark.css';
+          link.media = media; link.disabled = index === 2;
+          document.head.append(link);
+        }
+      });
+      await mode('auto');
+      await decision('official-dark');
+      const states = () => page.evaluate(() => [0, 1, 2].map((index) => {
+        const link = document.getElementById(`duplicate-${index}`);
+        return [link.media, link.disabled];
+      }));
+      assert.deepEqual(await states(), [['all', false], ['print', false], ['print', false]]);
+      await mode('off');
+      await decision('user-off');
+      assert.deepEqual(await states(), [['none', false], ['print', false], ['print', true]]);
+    });
+    for (const [delayMs, expected, badge] of [[4500, 'applied-light', 'On'], [1700, 'official-dark', 'Site dark']]) {
+      await check(`open popup settles after ${delayMs}ms CSS without reopening`, async () => {
+        await load({markup: stylesheetMarkup, initialMode: 'off'});
+        serve(`/popup-${delayMs}.css`, darkCss, {delayMs});
+        await addStylesheet(`/popup-${delayMs}.css`);
+        const popup = await context.newPage();
+        try {
+          await page.bringToFront();
+          await popup.goto(`chrome-extension://${session.extensionId}/popup.html`);
+          await popup.locator('#reset-mode').waitFor({state: 'visible', timeout});
+          await popup.locator('#reset-mode').click();
+          await decision(expected);
+          await popup.waitForFunction((badge) =>
+            document.querySelector('#site-state').textContent === badge &&
+            !document.querySelector('#enabled').disabled &&
+            document.querySelector('#popup').getAttribute('aria-busy') === 'false', badge, {timeout});
+          await popup.screenshot({path: path.join(artifactDir, `popup-slow-${delayMs}.png`)});
+        } finally {
+          await popup.close();
+          await page.bringToFront();
+        }
+      });
+    }
     await check('SPA class additions/removals survive restore on both roots', async () => {
       await load({markup: html.replace('data-theme="light"', 'data-theme="light" class="light root-old"')
         .replace('<body>', '<body class="theme-light body-old">')});

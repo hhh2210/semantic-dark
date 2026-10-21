@@ -532,3 +532,20 @@ describe('ThemeController async reconciliation', () => {
     expect(dom.enabled).toEqual([]);
   });
 });
+
+it('resets consecutive official failures after successful SPA recovery', async () => {
+  const official = new FakeOfficial();
+  const detector = new FakeDetector(result('light'), result('light'), result('native-dark'));
+  const {controller} = harness('auto', detector, async () => {}, official);
+  await controller.start();
+  try {
+    for (let route = 0; route < 3; route += 1) {
+      detector.samples.push(result('light'), result('light'), result('light'), result('light'), result('native-dark'));
+      await controller.recheck();
+      expect(controller.getStatus().decision).toBe('official-dark');
+    }
+    expect(official.activates).toBe(4);
+  } finally {
+    controller.stop();
+  }
+});

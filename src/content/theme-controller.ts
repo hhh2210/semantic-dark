@@ -252,6 +252,7 @@ export class ThemeController {
     if (!this.isCurrentProbe(generation)) return 'failed';
     const after = this.sampleAuthoredTheme();
     if (officialThemeLooksApplied(after)) {
+      this.officialFailures = 0;
       this.pendingOfficialGeneration = null;
       this.setStatus('official-dark', 'official-theme-activated');
       return 'applied';

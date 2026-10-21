@@ -1,5 +1,4 @@
-import type {OfficialThemeMutation} from './official-theme-catalog';
-import {isStylesheetLink, probeOfficialTheme, type OfficialThemeProbe} from './official-theme-recipes';
+import {isStylesheetLink, probeOfficialTheme, type OfficialThemeProbe, type OfficialThemeRecipe} from './official-theme-recipes';
 
 export {
   officialThemeLooksApplied,
@@ -65,28 +64,28 @@ export class OfficialThemeLane implements OfficialThemeLaneLike {
     return this.session !== null;
   }
 
-  private applyMutation(recipe: OfficialThemeMutation, session: OfficialThemeSession): void {
+  private applyMutation(recipe: OfficialThemeRecipe, session: OfficialThemeSession): void {
     if (recipe.type === 'stylesheet') {
-      for (const link of this.documentRef.querySelectorAll<HTMLLinkElement>('link')) {
-        if (!isStylesheetLink(link) || link.getAttribute('href') !== recipe.href ||
-          link.title !== recipe.title) continue;
-        const disabled = link.disabled;
-        const media = link.getAttribute('media');
-        const rel = link.rel;
-        const type = link.type;
-        session.undo.push(() => {
-          // A replaced or repurposed resource belongs to the site now.
-          if (link.getAttribute('href') !== recipe.href || link.title !== recipe.title ||
-            link.rel !== rel || link.type !== type) return;
-          if (disabled !== recipe.disabled && link.disabled === recipe.disabled) link.disabled = disabled;
-          if (media !== recipe.media && link.getAttribute('media') === recipe.media) {
-            restoreAttribute(link, 'media', media);
-          }
-        });
-        link.disabled = recipe.disabled;
-        link.media = recipe.media;
-        session.stylesheets.push(link);
-      }
+      const {link} = recipe;
+      if (!link.isConnected || link.ownerDocument !== this.documentRef || !isStylesheetLink(link)) return;
+      const href = link.getAttribute('href');
+      const title = link.title;
+      const disabled = link.disabled;
+      const media = link.getAttribute('media');
+      const rel = link.rel;
+      const type = link.type;
+      session.undo.push(() => {
+        // A replaced or repurposed resource belongs to the site now.
+        if (link.getAttribute('href') !== href || link.title !== title ||
+          link.rel !== rel || link.type !== type) return;
+        if (disabled !== recipe.disabled && link.disabled === recipe.disabled) link.disabled = disabled;
+        if (media !== recipe.media && link.getAttribute('media') === recipe.media) {
+          restoreAttribute(link, 'media', media);
+        }
+      });
+      link.disabled = recipe.disabled;
+      link.media = recipe.media;
+      session.stylesheets.push(link);
       return;
     }
     const element = recipe.target === 'html' ? this.documentRef.documentElement : this.documentRef.body;

@@ -26,16 +26,16 @@ export const BOOLEAN_DARK_ATTRIBUTES = [
   'darkmode',
 ] as const;
 
-const LIGHT_TO_DARK_VALUE: Record<string, string> = {
+const LIGHT_TO_DARK_VALUE = new Map(Object.entries({
   light: 'dark',
   day: 'night',
   auto: 'dark',
   system: 'dark',
   'light-mode': 'dark-mode',
   'theme-light': 'theme-dark',
-};
+}));
 
-const LIGHT_TO_DARK_CLASS: Record<string, string> = {
+const LIGHT_TO_DARK_CLASS = new Map(Object.entries({
   light: 'dark',
   'light-mode': 'dark-mode',
   'light-theme': 'dark-theme',
@@ -43,7 +43,7 @@ const LIGHT_TO_DARK_CLASS: Record<string, string> = {
   'is-light': 'is-dark',
   day: 'night',
   'day-mode': 'night-mode',
-};
+}));
 
 const LIGHT_BOOLEAN_VALUES = new Set(['false', '0', 'no', 'off']);
 
@@ -52,11 +52,11 @@ export function isDarkClassToken(token: string): boolean {
 }
 
 export function darkValueForThemeToken(value: string): string | null {
-  return LIGHT_TO_DARK_VALUE[value.trim().toLowerCase()] ?? null;
+  return LIGHT_TO_DARK_VALUE.get(value.trim().toLowerCase()) ?? null;
 }
 
 export function darkClassForLightClass(token: string): string | null {
-  return LIGHT_TO_DARK_CLASS[token.toLowerCase()] ?? null;
+  return LIGHT_TO_DARK_CLASS.get(token.toLowerCase()) ?? null;
 }
 
 export function darkBooleanValueFor(value: string | null): string | null {

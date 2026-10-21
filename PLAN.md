@@ -120,7 +120,7 @@ These constraints remain deterministic even if a model is introduced later:
 1. Pages with a coherent authored dark appearance remain untouched in automatic
    mode. When a page is still light but exposes a reversible official dark-mode
    switch, automatic mode prefers that switch over the Semantic Dark transform.
-   A tiny host seed (currently Zhihu and Bilibili) plus generic theme-attribute
+   A tiny host seed (currently Zhihu, Bilibili, and Juejin) plus generic theme-attribute
    flips may activate official CSS; they are not a per-site stylesheet patch
    database. If official activation does not produce native dark evidence, the
    mutation is restored and the transform lane may still run.

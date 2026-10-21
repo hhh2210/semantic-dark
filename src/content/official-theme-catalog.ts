@@ -7,8 +7,7 @@ export type OfficialThemeTarget = 'html' | 'body';
 
 export type OfficialThemeMutation =
   | {type: 'attribute'; target: OfficialThemeTarget; name: string; value: string}
-  | {type: 'class'; target: OfficialThemeTarget; add: readonly string[]; remove?: readonly string[]}
-  | {type: 'stylesheet'; href: string; title: string; disabled: boolean; media: string};
+  | {type: 'class'; target: OfficialThemeTarget; add: readonly string[]; remove?: readonly string[]};
 
 export interface OfficialThemeSite {
   id: string;

@@ -18,7 +18,7 @@ import {
   type NativeThemeEvidence,
   type NativeThemeKind,
 } from './native-theme-evidence';
-import {isDarkClassToken, THEME_ATTRIBUTES} from './theme-markers';
+import {BOOLEAN_DARK_ATTRIBUTES, isDarkClassToken, THEME_ATTRIBUTES} from './theme-markers';
 
 export {
   classifyNativeTheme,
@@ -247,9 +247,13 @@ function hasRootDarkMarker(): boolean {
   for (const element of [document.documentElement, document.body]) {
     if (!element) continue;
     if ([...element.classList].some((token) => isDarkClassToken(token))) return true;
+    for (const attribute of BOOLEAN_DARK_ATTRIBUTES) {
+      const value = element.getAttribute(attribute)?.trim().toLowerCase();
+      if (value !== undefined && ['', 'true', '1', 'yes', 'on'].includes(value)) return true;
+    }
     for (const attribute of THEME_ATTRIBUTES) {
       const tokens = (element.getAttribute(attribute) ?? '').toLowerCase().split(/[\s_:.-]+/);
-      if (tokens.includes('dark')) return true;
+      if (tokens.includes('dark') || tokens.includes('night')) return true;
     }
   }
   return false;

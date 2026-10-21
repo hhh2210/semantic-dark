@@ -21,11 +21,18 @@ export type OfficialThemeSource =
   | 'catalog+generic'
   | 'mixed';
 
+export type OfficialThemeRecipe = OfficialThemeMutation | {
+  type: 'stylesheet';
+  link: HTMLLinkElement;
+  disabled: boolean;
+  media: string;
+};
+
 export interface OfficialThemeProbe {
   capable: boolean;
   source: OfficialThemeSource;
   catalogId: string | null;
-  recipes: OfficialThemeMutation[];
+  recipes: OfficialThemeRecipe[];
 }
 
 const DARK_STYLESHEET_TITLE = /\b(dark|night|black|nocturne)\b/i;
@@ -59,15 +66,15 @@ export function officialThemeLooksApplied(decision: NativeThemeDecision): boolea
   return false;
 }
 
-export function genericRecipes(root: Document): OfficialThemeMutation[] {
+export function genericRecipes(root: Document): OfficialThemeRecipe[] {
   return [
     ...rootAttributeRecipes(root),
     ...stylesheetRecipes(root),
   ];
 }
 
-function rootAttributeRecipes(root: Document): OfficialThemeMutation[] {
-  const recipes: OfficialThemeMutation[] = [];
+function rootAttributeRecipes(root: Document): OfficialThemeRecipe[] {
+  const recipes: OfficialThemeRecipe[] = [];
   for (const target of ['html', 'body'] as const) {
     const element = target === 'html' ? root.documentElement : root.body;
     if (!element) continue;
@@ -97,16 +104,15 @@ function rootAttributeRecipes(root: Document): OfficialThemeMutation[] {
   return recipes;
 }
 
-function stylesheetRecipes(root: Document): OfficialThemeMutation[] {
-  const recipes: OfficialThemeMutation[] = [];
+function stylesheetRecipes(root: Document): OfficialThemeRecipe[] {
+  const recipes: OfficialThemeRecipe[] = [];
   for (const node of root.querySelectorAll('link')) {
     if (!(node instanceof HTMLLinkElement)) continue;
     if (!isStylesheetLink(node)) continue;
     if (!isDarkStylesheetCandidate(node)) continue;
     recipes.push({
       type: 'stylesheet',
-      href: node.getAttribute('href') ?? '',
-      title: node.title,
+      link: node,
       disabled: false,
       media: enabledStylesheetMedia(node.media),
     });
@@ -140,7 +146,7 @@ function enabledStylesheetMedia(media: string): string {
 
 function probeSource(
   site: OfficialThemeSite | null,
-  generic: readonly OfficialThemeMutation[],
+  generic: readonly OfficialThemeRecipe[],
 ): OfficialThemeSource {
   if (site && generic.length > 0) return 'catalog+generic';
   if (site) return 'catalog';
@@ -152,9 +158,9 @@ function probeSource(
   return 'none';
 }
 
-function dedupeRecipes(recipes: readonly OfficialThemeMutation[]): OfficialThemeMutation[] {
-  const seen = new Set<string>();
-  const unique: OfficialThemeMutation[] = [];
+function dedupeRecipes(recipes: readonly OfficialThemeRecipe[]): OfficialThemeRecipe[] {
+  const seen = new Set<string | HTMLLinkElement>();
+  const unique: OfficialThemeRecipe[] = [];
   for (const recipe of recipes) {
     const key = recipeKey(recipe);
     if (seen.has(key)) continue;
@@ -164,10 +170,10 @@ function dedupeRecipes(recipes: readonly OfficialThemeMutation[]): OfficialTheme
   return unique;
 }
 
-function recipeKey(recipe: OfficialThemeMutation): string {
+function recipeKey(recipe: OfficialThemeRecipe): string | HTMLLinkElement {
   if (recipe.type === 'attribute') return `attr:${recipe.target}:${recipe.name}:${recipe.value}`;
   if (recipe.type === 'stylesheet') {
-    return `css:${recipe.href}:${recipe.title}:${recipe.disabled}:${recipe.media}`;
+    return recipe.link;
   }
   return `class:${recipe.target}:${[...recipe.add].sort().join(',')}:${[...(recipe.remove ?? [])].sort().join(',')}`;
 }

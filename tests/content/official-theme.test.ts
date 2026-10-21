@@ -337,3 +337,46 @@ describe('official theme ownership', () => {
     lane.restore();
   });
 });
+
+describe('review regressions', () => {
+  it('preserves constructor classes and theme values alongside valid switches', () => {
+    document.documentElement.className = 'constructor __proto__ light';
+    document.documentElement.setAttribute('data-theme', 'constructor');
+    const lane = new OfficialThemeLane({hostname: () => 'example.com'});
+    expect(lane.activate()).toBe(true);
+    expect([...document.documentElement.classList].sort()).toEqual(['__proto__', 'constructor', 'dark']);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('constructor');
+    lane.restore();
+    expect([...document.documentElement.classList].sort()).toEqual(['__proto__', 'constructor', 'light']);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('constructor');
+  });
+
+  it('keeps duplicate href/title stylesheets scoped to each probed element', () => {
+    const links = ['none', 'print', 'print', 'none'].map((media, index) => {
+      const link = document.createElement('link');
+      link.setAttribute('data-official-theme-test', '');
+      link.rel = 'stylesheet';
+      link.title = 'Dark';
+      link.href = '/duplicate.css';
+      link.media = media;
+      link.disabled = index === 2;
+      document.head.append(link);
+      return link;
+    });
+    const untouched = new MutationObserver(() => {});
+    untouched.observe(links[1]!, {attributes: true});
+    const lane = new OfficialThemeLane({hostname: () => 'example.com'});
+    expect(lane.probe().recipes).toHaveLength(3);
+    lane.activate();
+    expect(links.map((link) => [link.media, link.disabled])).toEqual([
+      ['all', false], ['print', false], ['print', false], ['all', false],
+    ]);
+    expect(untouched.takeRecords()).toEqual([]);
+    lane.restore();
+    expect(links.map((link) => [link.media, link.disabled])).toEqual([
+      ['none', false], ['print', false], ['print', true], ['none', false],
+    ]);
+    expect(untouched.takeRecords()).toEqual([]);
+    untouched.disconnect();
+  });
+});
