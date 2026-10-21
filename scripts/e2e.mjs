@@ -7,8 +7,10 @@ import {fileURLToPath} from 'node:url';
 import {
   readPageState,
   readNativeDarkState,
+  readOfficialThemeState,
   verifyBaselineState,
   verifyNativeDarkState,
+  verifyOfficialThemeState,
   verifyPopupMetrics,
   verifyRestoredState,
   verifyTransformedState,
@@ -16,6 +18,7 @@ import {
   waitForRestoredState,
 } from '../src/testing/e2e/assertions.mjs';
 import {contrastRatio, parseRgb} from '../src/testing/e2e/colors.mjs';
+import {exerciseOfficialTheme} from '../src/testing/e2e/official-theme.mjs';
 import {exerciseInteractiveDomEffects} from '../src/testing/e2e/dom-effects.mjs';
 import {verifyRgba8Quantization} from '../src/testing/e2e/rgba8-quantization.mjs';
 import {
@@ -41,12 +44,15 @@ const CONFIG = {
   timeout: 15_000,
   routes: new Map([
     ['/', ['index.html', 'text/html; charset=utf-8']],
+    ['/favicon.ico', (_request, response) => { response.writeHead(204); response.end(); }],
     ['/index.html', ['index.html', 'text/html; charset=utf-8']],
     ['/fixture.css', ['fixture.css', 'text/css; charset=utf-8']],
     ['/icon.svg', ['icon.svg', 'image/svg+xml; charset=utf-8']],
     ['/raster-diagram.svg', ['raster-diagram.svg', 'image/svg+xml; charset=utf-8']],
     ['/native-dark.html', ['native-dark.html', 'text/html; charset=utf-8']],
     ['/native-dark.css', ['native-dark.css', 'text/css; charset=utf-8']],
+    ['/official-theme.html', ['official-theme.html', 'text/html; charset=utf-8']],
+    ['/official-theme.css', ['official-theme.css', 'text/css; charset=utf-8']],
   ]),
 };
 
@@ -59,13 +65,19 @@ async function main() {
   const popupLightPath = path.join(CONFIG.artifactDir, 'popup-light.png');
   const popupDarkPath = path.join(CONFIG.artifactDir, 'popup-dark.png');
   const popupNativePath = path.join(CONFIG.artifactDir, 'popup-native-dark.png');
+  const popupOfficialPath = path.join(CONFIG.artifactDir, 'popup-official-dark.png');
   const profilePath = await mkdtemp(path.join(tmpdir(), 'semantic-dark-e2e-'));
   const fixture = await createFixtureServer(CONFIG);
   let session;
+  console.error(`Disposable E2E profile: ${profilePath}`);
+  let deadline;
+  const abort = new AbortController();
+  const overallTimeout = Number(process.env.E2E_TIMEOUT_MS ?? 120_000);
 
-  try {
+  const run = async () => {
     const baseline = await captureBaseline({
       ...CONFIG,
+      signal: abort.signal,
       url: fixture.url,
       screenshotPath: beforePath,
       readState: readPageState,
@@ -74,6 +86,7 @@ async function main() {
 
     session = await openExtensionSession({
       ...CONFIG,
+      signal: abort.signal,
       profilePath,
       url: fixture.url,
       colorScheme: 'dark',
@@ -204,13 +217,45 @@ async function main() {
     assert.ok(animationAfterDark >= animationAfterLight - 50,
       'Theme deactivation restarted a running CSS animation');
 
-    const [beforeStats, afterStats, popupLightStats, popupDarkStats, popupNativeStats] =
+    const officialUrl = new URL('/official-theme.html', fixture.url).href;
+    await session.page.goto(officialUrl, {waitUntil: 'networkidle'});
+    await session.page.waitForFunction(() =>
+      document.documentElement.getAttribute('data-theme') === 'dark' &&
+      !document.documentElement.hasAttribute('data-semantic-dark-active'),
+    undefined, {timeout: CONFIG.timeout});
+    const officialPopup = await inspectCurrentPopup({
+      session,
+      expectedHost,
+      expectedDecision: 'official-dark',
+      expectedEnabled: false,
+      screenshotPath: popupOfficialPath,
+      colorScheme: 'dark',
+      timeout: CONFIG.timeout,
+    });
+    verifyPopupMetrics(officialPopup, {appearanceHidden: true});
+    assert.equal(officialPopup.badge, 'Site dark');
+    const officialState = await readOfficialThemeState(session.page);
+    verifyOfficialThemeState(officialState);
+
+    await session.page.emulateMedia({colorScheme: 'light'});
+    await session.page.waitForFunction(() =>
+      document.documentElement.getAttribute('data-theme') === 'light' &&
+      !document.documentElement.hasAttribute('data-semantic-dark-active'),
+    undefined, {timeout: CONFIG.timeout});
+    await session.page.emulateMedia({colorScheme: 'dark'});
+
+    const officialRegression = await exerciseOfficialTheme({
+      session, fixtureUrl: fixture.url, fixtureDir: CONFIG.fixtureDir, artifactDir: CONFIG.artifactDir, routes: CONFIG.routes, timeout: CONFIG.timeout,
+    });
+
+    const [beforeStats, afterStats, popupLightStats, popupDarkStats, popupNativeStats, popupOfficialStats] =
       await Promise.all([
         stat(beforePath),
         stat(afterPath),
         stat(popupLightPath),
         stat(popupDarkPath),
         stat(popupNativePath),
+        stat(popupOfficialPath),
       ]);
     console.log(JSON.stringify({
       ok: true,
@@ -238,6 +283,12 @@ async function main() {
           animationCurrentTime: {before: animationBefore, light: animationAfterLight, dark: animationAfterDark},
         },
       },
+      officialRegression,
+      officialTheme: {
+        url: officialUrl,
+        state: officialState,
+        popup: officialPopup,
+      },
       popup: {light: popupLight, dark: popupDark},
       metrics: {initial: initialMetrics, reprocessed: reprocessedMetrics},
       interactionMetrics,
@@ -261,14 +312,29 @@ async function main() {
         popupLight: {path: popupLightPath, bytes: popupLightStats.size},
         popupDark: {path: popupDarkPath, bytes: popupDarkStats.size},
         popupNative: {path: popupNativePath, bytes: popupNativeStats.size},
+        popupOfficial: {path: popupOfficialPath, bytes: popupOfficialStats.size},
       },
       consoleMessages: session.consoleMessages,
       pageErrors: session.pageErrors,
     }, null, 2));
+  };
+  const running = run();
+  try {
+    await Promise.race([running, new Promise((_, reject) => {
+      deadline = setTimeout(() => reject(new Error(`E2E exceeded ${overallTimeout} milliseconds`)), overallTimeout);
+    })]);
   } finally {
-    await session?.close();
-    await fixture.close();
-    await rm(profilePath, {recursive: true, force: true});
+    clearTimeout(deadline);
+    abort.abort(new Error('E2E finished or timed out'));
+    // Await late browser acquisition/closure before deleting its profile.
+    await running.catch(() => {});
+    try {
+      await session?.close();
+    } finally {
+      await fixture.close();
+      await rm(profilePath, {recursive: true, force: true});
+    }
+    console.error(`Removed E2E profile: ${profilePath}`);
   }
 }
 

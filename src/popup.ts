@@ -27,6 +27,13 @@ let confirmedConfig = config;
 let pageStatus = pendingStatus();
 let saveQueue: Promise<void> = Promise.resolve();
 let saveRevision = 0;
+let statusRevision = 0;
+let closed = false;
+
+window.addEventListener('pagehide', () => {
+  closed = true;
+  statusRevision += 1;
+}, {once: true});
 
 interface ActiveTabContext {
   id: number;
@@ -98,6 +105,13 @@ function statusPresentation(status: PageThemeStatus): {
       };
     case 'applied-light':
       return {badge: 'On', hint: 'Applied automatically to this light page', note: '', locked: false};
+    case 'official-dark':
+      return {
+        badge: 'Site dark',
+        hint: "Using this site's official dark appearance",
+        note: 'Semantic Dark stays off so the site theme can apply. Turn on to override it.',
+        locked: false,
+      };
     case 'native-dark':
       return {
         badge: 'Already dark',
@@ -163,9 +177,12 @@ async function readPageStatus(): Promise<PageThemeStatus> {
   return chrome.tabs.sendMessage(tabId, message, {frameId: 0});
 }
 
-async function refreshPageStatus(attempts = 12): Promise<void> {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    pageStatus = await readPageStatus();
+async function refreshPageStatus(): Promise<void> {
+  const revision = ++statusRevision;
+  while (!closed && revision === statusRevision) {
+    const status = await readPageStatus();
+    if (closed || revision !== statusRevision) return;
+    pageStatus = status;
     render();
     if (pageStatus.decision !== 'pending') return;
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -174,6 +191,7 @@ async function refreshPageStatus(attempts = 12): Promise<void> {
 
 function persist(next: NormalizedThemeConfig): void {
   const revision = ++saveRevision;
+  statusRevision += 1;
   config = next;
   pageStatus = optimisticStatus(next.mode);
   hideError();
@@ -183,8 +201,10 @@ function persist(next: NormalizedThemeConfig): void {
     const message: RuntimeMessage = {type: 'semantic-dark:set-config', host, config: next};
     const saved = normalizeThemeConfig(await chrome.runtime.sendMessage(message));
     confirmedConfig = saved;
-    if (revision === saveRevision) config = saved;
-    await refreshPageStatus();
+    if (revision === saveRevision) {
+      config = saved;
+      await refreshPageStatus();
+    }
   }).catch(async () => {
     if (revision !== saveRevision) return;
     config = confirmedConfig;

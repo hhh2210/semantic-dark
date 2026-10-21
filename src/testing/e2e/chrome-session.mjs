@@ -7,16 +7,34 @@ export async function captureBaseline({
   url,
   screenshotPath,
   readState,
+  signal,
 }) {
   const browser = await chromium.launch({executablePath: chromePath, headless});
+  const close = await closeOnAbort(browser, signal);
   try {
     const page = await browser.newPage({viewport});
     await page.goto(url, {waitUntil: 'networkidle'});
     await page.screenshot({path: screenshotPath, fullPage: true});
     return {state: await readState(page), browserVersion: browser.version()};
   } finally {
-    await browser.close();
+    await close();
   }
+}
+
+async function closeOnAbort(resource, signal) {
+  let closing;
+  const close = () => {
+    signal?.removeEventListener('abort', onAbort);
+    // Playwright may return early from a second close(); await the first one.
+    return closing ??= resource.close();
+  };
+  const onAbort = () => { void close().catch(() => {}); };
+  if (signal?.aborted) {
+    await close();
+    signal.throwIfAborted();
+  }
+  signal?.addEventListener('abort', onAbort, {once: true});
+  return close;
 }
 
 function attachDiagnostics(page, consoleMessages, pageErrors) {
@@ -48,6 +66,7 @@ export async function openExtensionSession({
   colorScheme,
   url,
   timeout = 15_000,
+  signal,
 }) {
   const consoleMessages = [];
   const pageErrors = [];
@@ -65,6 +84,7 @@ export async function openExtensionSession({
     ],
   });
 
+  const close = await closeOnAbort(context, signal);
   context.on('page', (candidate) => attachDiagnostics(candidate, consoleMessages, pageErrors));
   try {
     const page = await context.newPage();
@@ -76,10 +96,10 @@ export async function openExtensionSession({
       consoleMessages,
       pageErrors,
       ...identity,
-      close: () => context.close(),
+      close,
     };
   } catch (error) {
-    await context.close();
+    await close();
     throw error;
   }
 }

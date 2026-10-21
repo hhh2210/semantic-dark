@@ -18,6 +18,7 @@ import {
   type NativeThemeEvidence,
   type NativeThemeKind,
 } from './native-theme-evidence';
+import {BOOLEAN_DARK_ATTRIBUTES, isDarkClassToken, THEME_ATTRIBUTES} from './theme-markers';
 
 export {
   classifyNativeTheme,
@@ -31,28 +32,20 @@ export {
 
 const GRID = [0.1, 0.5, 0.9] as const;
 const MEDIA_SELECTOR = 'img,video,canvas,svg,iframe,object,embed';
-const DARK_CLASSES = new Set(['dark', 'dark-mode', 'theme-dark', 'is-dark']);
-const THEME_ATTRIBUTES = [
-  'data-theme',
-  'data-bs-theme',
-  'data-color-mode',
-  'data-color-theme',
-  'data-mode',
-  'data-dark-mode',
-] as const;
 
 export interface NativeThemeDetectorLike {
   prefersDark(): boolean;
   sample(): NativeThemeDecision;
-  start(onChange: () => void): void;
+  start(onChange: (stylesChanged?: boolean, loadedStylesheet?: Element) => void): void;
   stop(): void;
+  withSuppressedAuthoredChanges?(run: () => void): void;
 }
 
 export class NativeDarkDetector implements NativeThemeDetectorLike {
   private authoredThemeObserver: AuthoredThemeObserver | null = null;
   private darkPreference: MediaQueryList | null = null;
   private forcedColors: MediaQueryList | null = null;
-  private onChange: (() => void) | null = null;
+  private onChange: ((stylesChanged?: boolean, loadedStylesheet?: Element) => void) | null = null;
 
   private readonly notify = (): void => { this.onChange?.(); };
   private readonly notifyWhenVisible = (): void => {
@@ -80,7 +73,7 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
     });
   }
 
-  start(onChange: () => void): void {
+  start(onChange: (stylesChanged?: boolean, loadedStylesheet?: Element) => void): void {
     this.stop();
     this.onChange = onChange;
     this.darkPreference = safeMatchMedia('(prefers-color-scheme: dark)');
@@ -88,10 +81,20 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
     this.darkPreference?.addEventListener('change', this.notify);
     this.forcedColors?.addEventListener('change', this.notify);
 
-    this.authoredThemeObserver = new AuthoredThemeObserver(this.notify);
+    this.authoredThemeObserver = new AuthoredThemeObserver((stylesChanged, loadedStylesheet) =>
+      this.onChange?.(stylesChanged, loadedStylesheet));
     this.authoredThemeObserver.start();
     document.addEventListener('visibilitychange', this.notifyWhenVisible);
     window.addEventListener('pageshow', this.notify);
+  }
+
+  withSuppressedAuthoredChanges(run: () => void): void {
+    this.authoredThemeObserver?.suspend();
+    try {
+      run();
+    } finally {
+      this.authoredThemeObserver?.resume();
+    }
   }
 
   stop(): void {
@@ -244,10 +247,14 @@ function schemeValueSelectsLight(value: string, prefersDark: boolean): boolean {
 function hasRootDarkMarker(): boolean {
   for (const element of [document.documentElement, document.body]) {
     if (!element) continue;
-    if ([...element.classList].some((token) => DARK_CLASSES.has(token.toLowerCase()))) return true;
+    if ([...element.classList].some((token) => isDarkClassToken(token))) return true;
+    for (const attribute of BOOLEAN_DARK_ATTRIBUTES) {
+      const value = element.getAttribute(attribute)?.trim().toLowerCase();
+      if (value !== undefined && ['', 'true', '1', 'yes', 'on'].includes(value)) return true;
+    }
     for (const attribute of THEME_ATTRIBUTES) {
       const tokens = (element.getAttribute(attribute) ?? '').toLowerCase().split(/[\s_:.-]+/);
-      if (tokens.includes('dark')) return true;
+      if (tokens.includes('dark') || tokens.includes('night')) return true;
     }
   }
   return false;

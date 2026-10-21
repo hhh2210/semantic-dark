@@ -6,7 +6,9 @@ import path from 'node:path';
 export async function assertE2eInputs({chromePath, extensionDir, fixtureDir, routes}) {
   await access(chromePath);
   await access(path.join(extensionDir, 'manifest.json'));
-  const fixtureFiles = new Set([...routes.values()].map(([filename]) => filename));
+  const fixtureFiles = new Set([...routes.values()]
+    .filter((route) => typeof route !== 'function')
+    .map(([filename]) => filename));
   await Promise.all([...fixtureFiles].map((filename) => access(path.join(fixtureDir, filename))));
 }
 
@@ -21,6 +23,10 @@ export async function createFixtureServer({fixtureDir, routes}) {
         return;
       }
 
+      if (typeof route === 'function') {
+        await route(request, response);
+        return;
+      }
       const [filename, contentType] = route;
       const body = await readFile(path.join(fixtureDir, filename));
       response.writeHead(200, {

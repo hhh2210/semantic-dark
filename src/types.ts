@@ -46,6 +46,7 @@ export type PageThemeDecision =
   | 'pending'
   | 'system-light'
   | 'applied-light'
+  | 'official-dark'
   | 'native-dark'
   | 'ambiguous'
   | 'forced-colors'

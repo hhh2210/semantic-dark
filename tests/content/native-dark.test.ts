@@ -226,4 +226,55 @@ describe('native theme classification', () => {
     detector.stop();
     lateBody.replaceWith(originalBody);
   });
+
+  it('does not treat official theme activation as an authored theme change', async () => {
+    const detector = new NativeDarkDetector();
+    let changes = 0;
+    detector.start(() => { changes += 1; });
+    document.documentElement.setAttribute('data-theme', 'light');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const afterAuthored = changes;
+
+    detector.withSuppressedAuthoredChanges(() => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(changes).toBe(afterAuthored);
+
+    document.documentElement.setAttribute('data-theme', 'light');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(changes).toBeGreaterThan(afterAuthored);
+    detector.stop();
+    document.documentElement.removeAttribute('data-theme');
+  });
+});
+
+describe('official root markers', () => {
+  it.each([
+    ['dark', 'true'], ['data-dark', 'true'], ['data-dark-mode', 'true'], ['darkmode', 'true'],
+    ['data-theme', 'night'], ['data-theme', 'dark-mode'], ['data-theme', 'theme-dark'],
+  ])('recognizes %s=%s with sparse dark evidence', (name, value) => {
+    for (const root of [document.documentElement, document.body]) {
+      root.setAttribute(name!, value!);
+      try {
+        const detected = new NativeDarkDetector().sample().evidence.rootDarkMarker;
+        expect(detected).toBe(true);
+        expect(classifyNativeTheme(evidence({rootDarkMarker: detected, knownSamples: 3,
+          darkCoverage: 1, lightOnDarkCoherence: 1})).kind).toBe('native-dark');
+      } finally {
+        root.removeAttribute(name!);
+      }
+    }
+  });
+
+  it('does not interpret false boolean values or unrelated night text as active markers', () => {
+    for (const value of ['false', '0', 'no', 'off', 'constructor']) {
+      document.documentElement.setAttribute('dark', value);
+      try { expect(new NativeDarkDetector().sample().evidence.rootDarkMarker).toBe(false); }
+      finally { document.documentElement.removeAttribute('dark'); }
+    }
+    document.documentElement.setAttribute('data-theme', 'midnightly');
+    try { expect(new NativeDarkDetector().sample().evidence.rootDarkMarker).toBe(false); }
+    finally { document.documentElement.removeAttribute('data-theme'); }
+  });
 });

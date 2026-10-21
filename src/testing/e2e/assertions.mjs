@@ -310,6 +310,53 @@ export function verifyNativeDarkState(state) {
     'Native card text no longer meets 4.5:1 contrast');
 }
 
+export async function readOfficialThemeState(page) {
+  return page.evaluate(() => {
+    const rootStyle = getComputedStyle(document.documentElement);
+    const bodyStyle = getComputedStyle(document.body);
+    const card = document.querySelector('#official-theme-card');
+    if (!card) throw new Error('Official theme fixture card is missing');
+    const cardStyle = getComputedStyle(card);
+    const ownedAttributes = [];
+    for (const element of document.querySelectorAll('*')) {
+      for (const attribute of element.getAttributeNames()) {
+        if (attribute.startsWith('data-semantic-dark-')) {
+          ownedAttributes.push(`${element.tagName.toLowerCase()}:${attribute}`);
+        }
+      }
+    }
+    return {
+      initialActive: globalThis.officialInitialState?.semanticDarkActive ?? null,
+      initialTheme: globalThis.officialInitialState?.theme ?? null,
+      active: document.documentElement.hasAttribute('data-semantic-dark-active'),
+      theme: document.documentElement.getAttribute('data-theme'),
+      ownedAttributes,
+      rootBackground: rootStyle.backgroundColor,
+      bodyBackground: bodyStyle.backgroundColor,
+      cardBackground: cardStyle.backgroundColor,
+      cardText: cardStyle.color,
+    };
+  });
+}
+
+export function verifyOfficialThemeState(state) {
+  assert.equal(state.initialActive, false,
+    'Official-theme page received the prepaint active marker before its inline probe');
+  assert.equal(state.initialTheme, 'light', 'Official-theme fixture did not start in light mode');
+  assert.equal(state.active, false, 'Official-theme page remained extension-active');
+  assert.equal(state.theme, 'dark', `Official data-theme was ${state.theme}, expected dark`);
+  assert.deepEqual(state.ownedAttributes, [],
+    `Official-theme page was transformed: ${state.ownedAttributes.join(', ')}`);
+  assert.ok(colorsNear(parseRgb(state.rootBackground), [15, 17, 21]),
+    `Official root background was not the site dark canvas: ${state.rootBackground}`);
+  assert.ok(colorsNear(parseRgb(state.bodyBackground), [15, 17, 21]),
+    `Official body background was not the site dark canvas: ${state.bodyBackground}`);
+  assert.ok(colorsNear(parseRgb(state.cardBackground), [28, 32, 39]),
+    `Official card background was not the site dark surface: ${state.cardBackground}`);
+  assert.ok(contrastRatio(parseRgb(state.cardText), parseRgb(state.cardBackground)) >= 4.5,
+    'Official card text no longer meets 4.5:1 contrast');
+}
+
 export function verifyPopupMetrics(metrics, {appearanceHidden}) {
   assert.ok(metrics.popup.width >= 320, `Popup width is only ${metrics.popup.width}px`);
   assert.ok(metrics.switch.width >= 28 && metrics.switch.height >= 28,
