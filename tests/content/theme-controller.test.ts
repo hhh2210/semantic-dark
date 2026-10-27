@@ -507,6 +507,79 @@ describe('ThemeController async reconciliation', () => {
     controller.stop();
   });
 
+  it('keeps an active transform painted while retrying an official switch', async () => {
+    const official = new FakeOfficial();
+    const detector = new FakeDetector(...Array.from({length: 10}, () => result('light')));
+    const {controller, dom} = harness('auto', detector, async () => {}, official);
+    await controller.start();
+    expect(dom.enabled).toEqual([true]);
+
+    // Authored style changes (for example CSS-in-JS on click) renew the official budget.
+    detector.emit(true);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(official.activates).toBe(2);
+    expect(official.applied).toBe(false);
+    expect(controller.getStatus().decision).toBe('applied-light');
+    expect(dom.enabled).toEqual([true]);
+    expect(document.documentElement.hasAttribute('data-semantic-dark-active')).toBe(true);
+    controller.stop();
+  });
+
+  it('defers engine rescans while an official candidate is pending and remaps after rollback', async () => {
+    class SettlingOfficial extends FakeOfficial {
+      onSettle: (() => void) | null = null;
+      async settle(): Promise<void> { this.onSettle?.(); }
+    }
+    class RescanEngine extends FakeEngine {
+      rescans = 0;
+      rescan(): void { this.rescans += 1; }
+    }
+    const official = new SettlingOfficial();
+    const detector = new FakeDetector(...Array.from({length: 10}, () => result('light')));
+    const dom = new RescanEngine();
+    const controller = new ThemeController(config('auto'), detector,
+      {dom, svg: new FakeEngine(), image: new FakeEngine()}, {
+        settle: async () => {},
+        stableDelay: async () => {},
+        debounceMs: 0,
+        officialTheme: official,
+      });
+    await controller.start();
+    const afterStart = dom.rescans;
+    let rescansWhilePending = -1;
+    official.onSettle = () => {
+      controller.rescan();
+      rescansWhilePending = dom.rescans - afterStart;
+    };
+
+    detector.emit(true);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(rescansWhilePending).toBe(0);
+    expect(official.applied).toBe(false);
+    expect(dom.rescans - afterStart).toBe(1);
+    expect(controller.getStatus().decision).toBe('applied-light');
+    controller.stop();
+  });
+
+  it('hands an active transform over to a confirmed official theme', async () => {
+    const official = new FakeOfficial();
+    const detector = new FakeDetector(...Array.from({length: 5}, () => result('light')));
+    const {controller, dom} = harness('auto', detector, async () => {}, official);
+    await controller.start();
+    detector.samples.push(result('light'), result('light'), result('native-dark'));
+
+    detector.emit(true);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(controller.getStatus().decision).toBe('official-dark');
+    expect(official.applied).toBe(true);
+    expect(dom.enabled).toEqual([true, false]);
+    expect(document.documentElement.hasAttribute('data-semantic-dark-active')).toBe(false);
+    controller.stop();
+  });
+
   it('stops retrying a failed official switch after two attempts', async () => {
     const official = new FakeOfficial();
     const detector = new FakeDetector(...Array.from({length: 14}, () => result('light')));
