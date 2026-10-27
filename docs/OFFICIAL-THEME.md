@@ -14,7 +14,9 @@ beside native-dark detection.
 2. If the page is already native-dark, forced-colors, or ambiguous: keep the
    existing fail-closed behavior. Semantic Dark stays off.
 3. If the page is stably light: try a reversible official switch when one is
-   known.
+   known. When the transform is already active (a retry after an authored style
+   change), it stays painted while the candidate loads; samples hide it only
+   within one task, so a failed retry never shows the light page.
 4. Re-sample. Official success requires **visual** dark evidence
    (`dark-rendered-surfaces` or a dark `color-scheme` with dark coverage). A
    root marker we just wrote is not enough.

@@ -3,6 +3,7 @@ import {
   beginDomStyleUpdate,
   domOverrideCss,
   endDomStyleUpdate,
+  needsTransitionGuard,
 } from './dom-style-contract';
 import {DomStateObserver} from './dom-state-observer';
 import {mapElementStyles, restoreElementStyles} from './dom-style-mapper';
@@ -10,6 +11,39 @@ import {mapElementStyles, restoreElementStyles} from './dom-style-mapper';
 type SchedulableRoot = Document | ShadowRoot;
 const MAX_INTERACTION_ELEMENTS = 64;
 const MAX_INTERACTION_CHILDREN = 24;
+// Mutation callbacks run before the next paint. Mapping a bounded prefix there
+// keeps inserted or restyled content from painting its light authored colors.
+// Right after a discrete input the user is waiting for that frame anyway, so a
+// one-frame budget is preferable to a flash; ambient mutation streams (timers,
+// animations, live data) keep the smaller budget so they cannot cause jank.
+const MUTATION_SYNC_BUDGET_MS = 8;
+const INTERACTION_SYNC_BUDGET_MS = 16;
+const INTERACTION_WINDOW_MS = 1000;
+const INPUT_EVENTS = ['pointerdown', 'keydown', 'click'] as const;
+// Remapping an already-mapped container restyles its whole subtree (its color
+// is inherited). Such containers keep their previous dark mapping until idle.
+const SYNC_REMAP_SUBTREE_LIMIT = 512;
+const IDLE_BATCH_SIZE = 40;
+
+function hasAncestorIn(element: Element, set: ReadonlySet<Element>): boolean {
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    if (set.has(parent)) return true;
+  }
+  return false;
+}
+
+function collectSubtree(root: Element, out: Element[]): void {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  for (let current: Node | null = root; current; current = walker.nextNode()) out.push(current as Element);
+}
+
+function hasLargeSubtree(element: Element): boolean {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_ELEMENT);
+  for (let count = 0; walker.nextNode(); count += 1) {
+    if (count >= SYNC_REMAP_SUBTREE_LIMIT) return true;
+  }
+  return false;
+}
 
 interface IdleDeadlineLike {
   didTimeout: boolean;
@@ -69,7 +103,15 @@ export class DomThemeEngine {
   private queue: Element[] = [];
   private queued = new WeakSet<Element>();
   private idleHandle: number | null = null;
+  private frameHandle: number | null = null;
+  // Elements of recently changed subtrees, in tree order, mapped before paint.
+  private urgent: Element[] = [];
+  private urgentIndex = 0;
   private enabled = false;
+  private lastInput = Number.NEGATIVE_INFINITY;
+  private readonly onInput = (): void => {
+    this.lastInput = performance.now();
+  };
 
   constructor(config: ThemeConfig) {
     this.config = config;
@@ -90,18 +132,24 @@ export class DomThemeEngine {
       return;
     }
     if (!wasEnabled) this.registerRoot(document);
-    this.resetTouchedElements();
+    // Each element keeps its previous mapping until it is atomically remapped.
     this.enqueue(document.documentElement);
   }
 
   stop(): void {
     this.enabled = false;
+    for (const event of INPUT_EVENTS) window.removeEventListener(event, this.onInput, true);
+    this.lastInput = Number.NEGATIVE_INFINITY;
     for (const observer of this.observers.values()) observer.disconnect();
     this.observers.clear();
     for (const observer of this.stateObservers.values()) observer.stop();
     this.stateObservers.clear();
     for (const root of this.roots) removeOverrideStyle(root);
     this.roots.clear();
+    if (this.frameHandle != null) cancelAnimationFrame(this.frameHandle);
+    this.frameHandle = null;
+    this.urgent = [];
+    this.urgentIndex = 0;
     this.queue = [];
     this.queued = new WeakSet<Element>();
     for (const element of this.touched) this.restoreElement(element);
@@ -110,7 +158,9 @@ export class DomThemeEngine {
 
   rescan(): void {
     if (!this.enabled) return;
-    this.resetTouchedElements();
+    this.pruneDetached();
+    // Restoring everything first would paint the light page until idle remapping
+    // catches up. Stale dark mappings are replaced element by element instead.
     this.enqueue(document.documentElement);
   }
 
@@ -118,20 +168,27 @@ export class DomThemeEngine {
     if (this.roots.has(root)) return;
     this.roots.add(root);
     ensureOverrideStyle(root);
+    if (root instanceof Document) {
+      for (const event of INPUT_EVENTS) {
+        window.addEventListener(event, this.onInput, {capture: true, passive: true});
+      }
+    }
     const observer = new MutationObserver((records) => {
+      const changed = new Set<Element>();
       for (const record of records) {
-        if (record.type === 'attributes') {
-          const target = record.target as Element;
-          if (target instanceof HTMLElement) {
-            this.restoreElement(target);
-            this.touched.delete(target);
-          }
-          this.enqueue(target);
-        }
+        if (record.type === 'attributes') changed.add(record.target as Element);
         for (const node of record.addedNodes) {
-          if (node instanceof Element && !node.hasAttribute('data-semantic-dark-sheet')) this.enqueue(node);
+          if (node instanceof Element && !node.hasAttribute('data-semantic-dark-sheet')) changed.add(node);
         }
       }
+      for (const element of changed) {
+        if (!hasAncestorIn(element, changed)) this.enqueue(element, this.urgent);
+      }
+      const now = performance.now();
+      const budget = now - this.lastInput < INTERACTION_WINDOW_MS
+        ? INTERACTION_SYNC_BUDGET_MS
+        : MUTATION_SYNC_BUDGET_MS;
+      this.drainUrgent(now + budget);
     });
     observer.observe(root, {subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'color', 'bgcolor']});
     this.observers.set(root, observer);
@@ -142,13 +199,14 @@ export class DomThemeEngine {
     else for (const child of root.children) this.enqueue(child);
   }
 
-  private enqueue(root: Element): void {
+  private enqueue(root: Element, urgent?: Element[]): void {
     if (!this.enabled) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
     let current: Node | null = root;
     while (current) {
       const element = current as Element;
       this.enqueueOne(element);
+      urgent?.push(element);
       current = walker.nextNode();
     }
     if (this.idleHandle == null) this.idleHandle = scheduleIdle((deadline) => this.drain(deadline));
@@ -160,30 +218,86 @@ export class DomThemeEngine {
     this.queue.push(element);
   }
 
+  // Changed subtrees are mapped before paint until the deadline, then once per
+  // frame before paint, so an unfinished remainder is light for frames rather
+  // than an idle period. The cursor only moves forward, so every frame makes
+  // progress and the list empties.
+  private drainUrgent(deadline: number): void {
+    while (this.urgentIndex < this.urgent.length) {
+      if (!this.enabled) return;
+      if (performance.now() >= deadline) {
+        this.frameHandle ??= requestAnimationFrame(() => {
+          this.frameHandle = null;
+          this.drainUrgent(performance.now() + MUTATION_SYNC_BUDGET_MS);
+        });
+        return;
+      }
+      const element = this.urgent[this.urgentIndex]!;
+      this.urgentIndex += 1;
+      if (!this.queued.has(element) || !element.isConnected) continue;
+      // Already-mapped large containers keep their dark mapping until idle time.
+      if (element instanceof HTMLElement && this.touched.has(element) && hasLargeSubtree(element)) continue;
+      this.queued.delete(element);
+      this.processElement(element);
+      if (element.shadowRoot) {
+        for (const child of element.shadowRoot.children) collectSubtree(child, this.urgent);
+      }
+    }
+    this.urgent = [];
+    this.urgentIndex = 0;
+  }
+
   private drain(deadline: IdleDeadlineLike): void {
     this.idleHandle = null;
     let processed = 0;
     const timeoutBudget = deadline.didTimeout ? 240 : 80;
     while (this.queue.length > 0 && (processed < timeoutBudget || deadline.timeRemaining() > 2)) {
-      const element = this.queue.shift()!;
-      if (!this.queued.has(element)) continue;
-      this.queued.delete(element);
-      this.processElement(element);
-      processed += 1;
+      const batch: Element[] = [];
+      while (this.queue.length > 0 && batch.length < IDLE_BATCH_SIZE) {
+        const element = this.queue.shift()!;
+        if (!this.queued.has(element)) continue;
+        this.queued.delete(element);
+        batch.push(element);
+      }
+      this.processBatch(batch);
+      processed += batch.length;
     }
     if (this.queue.length > 0) this.idleHandle = scheduleIdle((next) => this.drain(next));
+    else this.pruneDetached();
+  }
+
+  // Removed content must not stay referenced (and restored on stop) forever.
+  private pruneDetached(): void {
+    for (const element of this.touched) {
+      if (!element.isConnected) this.touched.delete(element);
+    }
   }
 
   private processElement(element: Element): void {
-    if (shouldSkip(element)) return;
-    if (element.shadowRoot) this.registerRoot(element.shadowRoot);
-    if (!(element instanceof HTMLElement)) return;
+    this.processBatch([element]);
+  }
 
-    beginDomStyleUpdate(element);
+  // Restores and remaps a tree-ordered batch within one task: authored sources
+  // must be read without our override, but nothing is painted in between.
+  // Restoring the whole batch first costs one style invalidation instead of one
+  // per element.
+  private processBatch(elements: readonly Element[]): void {
+    const batch: HTMLElement[] = [];
+    for (const element of elements) {
+      if (shouldSkip(element)) continue;
+      if (element.shadowRoot) this.registerRoot(element.shadowRoot);
+      if (element instanceof HTMLElement) batch.push(element);
+    }
+    const guarded = batch.filter(needsTransitionGuard);
+    for (const element of guarded) beginDomStyleUpdate(element);
     try {
-      if (mapElementStyles(element, this.config)) this.touched.add(element);
+      for (const element of batch) restoreElementStyles(element);
+      for (const element of batch) {
+        if (mapElementStyles(element, this.config)) this.touched.add(element);
+        else this.touched.delete(element);
+      }
     } finally {
-      endDomStyleUpdate(element);
+      for (const element of guarded) endDomStyleUpdate(element);
     }
   }
 
@@ -204,19 +318,10 @@ export class DomThemeEngine {
       composedElementDepth(first) - composedElementDepth(second)
     );
     for (const element of ordered) this.queued.delete(element);
-    for (const element of ordered) {
-      restoreElementStyles(element);
-      this.touched.delete(element);
-      this.processElement(element);
-    }
+    for (const element of ordered) this.processElement(element);
   }
 
   private restoreElement(element: HTMLElement): void {
     restoreElementStyles(element);
-  }
-
-  private resetTouchedElements(): void {
-    for (const element of this.touched) this.restoreElement(element);
-    this.touched.clear();
   }
 }
