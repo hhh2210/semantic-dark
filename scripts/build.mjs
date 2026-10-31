@@ -13,6 +13,7 @@ await build({
   entryPoints: {
     content: resolve(root, 'src/content/index.ts'),
     'main-world': resolve(root, 'src/main-world.ts'),
+    prepaint: resolve(root, 'src/prepaint.ts'),
     'service-worker': resolve(root, 'src/service-worker.ts'),
     'raster-worker': resolve(root, 'src/raster/worker.ts'),
     'raster-worker-host': resolve(root, 'src/raster/worker-host.ts'),

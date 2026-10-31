@@ -19,6 +19,13 @@ export const DEFAULT_THEME: NormalizedThemeConfig = {
   minimumTextContrast: 4.5,
 };
 
+export const CONFIG_KEY_PREFIX = 'semantic-dark:';
+
+/** chrome.storage.local key of a host's config. */
+export function configStorageKey(host: string): string {
+  return `${CONFIG_KEY_PREFIX}${host}`;
+}
+
 export function normalizeThemeConfig(
   input?: Partial<ThemeConfig> | null,
 ): NormalizedThemeConfig {

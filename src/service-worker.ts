@@ -1,10 +1,21 @@
 import {
+  configStorageKey as keyFor,
   normalizeThemeConfig,
   type RuntimeMessage,
   type ThemeConfig,
 } from './types';
+import {prepaintRegistration} from './prepaint-registration';
 
-const keyFor = (host: string) => `semantic-dark:${host}`;
+const syncPrepaint = prepaintRegistration({
+  scripting: chrome.scripting,
+  storage: chrome.storage.local,
+});
+chrome.runtime.onInstalled.addListener(() => { void syncPrepaint(); });
+chrome.runtime.onStartup.addListener(() => { void syncPrepaint(); });
+// Disabling a host must exclude it before its next document starts.
+chrome.storage.onChanged.addListener((_changes, area) => {
+  if (area === 'local') void syncPrepaint();
+});
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
   if (message.type === 'semantic-dark:get-config') {

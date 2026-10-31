@@ -69,6 +69,7 @@ export class DomThemeEngine {
   private queue: Element[] = [];
   private queued = new WeakSet<Element>();
   private idleHandle: number | null = null;
+  private idleWaiters: Array<() => void> = [];
   private enabled = false;
 
   constructor(config: ThemeConfig) {
@@ -94,6 +95,12 @@ export class DomThemeEngine {
     this.enqueue(document.documentElement);
   }
 
+  /** Resolves once every queued element is mapped, or at once if none is pending. */
+  whenIdle(): Promise<void> {
+    if (!this.enabled || this.idleHandle == null) return Promise.resolve();
+    return new Promise((resolve) => { this.idleWaiters.push(resolve); });
+  }
+
   stop(): void {
     this.enabled = false;
     for (const observer of this.observers.values()) observer.disconnect();
@@ -106,6 +113,7 @@ export class DomThemeEngine {
     this.queued = new WeakSet<Element>();
     for (const element of this.touched) this.restoreElement(element);
     this.touched.clear();
+    this.resolveIdleWaiters();
   }
 
   rescan(): void {
@@ -172,6 +180,13 @@ export class DomThemeEngine {
       processed += 1;
     }
     if (this.queue.length > 0) this.idleHandle = scheduleIdle((next) => this.drain(next));
+    else this.resolveIdleWaiters();
+  }
+
+  private resolveIdleWaiters(): void {
+    const waiters = this.idleWaiters;
+    this.idleWaiters = [];
+    for (const resolve of waiters) resolve();
   }
 
   private processElement(element: Element): void {

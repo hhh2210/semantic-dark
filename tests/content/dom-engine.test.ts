@@ -29,6 +29,32 @@ describe('DomThemeEngine', () => {
       `:root[data-semantic-dark-active] [${DOM_ATTRIBUTE.afterBackground}]::after`,
     );
   });
+  it('reports idle only once every queued element has been mapped', async () => {
+    document.body.innerHTML = '<main style="background:#fff;color:#111">Text</main>';
+    const main = document.querySelector<HTMLElement>('main')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+
+    engine.start();
+    let mapped: boolean | null = null;
+    const idle = engine.whenIdle().then(() => {
+      mapped = main.hasAttribute('data-semantic-dark-background');
+    });
+    expect(mapped).toBe(null);
+    await idle;
+    expect(mapped).toBe(true);
+    await expect(engine.whenIdle()).resolves.toBeUndefined();
+  });
+
+  it('releases idle waiters when it stops before draining', async () => {
+    document.body.innerHTML = '<main style="background:#fff">Text</main>';
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    engine.start();
+    const idle = engine.whenIdle();
+    engine.stop();
+    await expect(idle).resolves.toBeUndefined();
+  });
+
   it('maps authored backgrounds, text, and borders through role variables', async () => {
     document.body.innerHTML = `
       <article id="card" style="background-color:#fff;color:#333;border:1px solid #bbb">

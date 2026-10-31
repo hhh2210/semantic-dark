@@ -20,6 +20,14 @@ import {
 import {contrastRatio, parseRgb} from '../src/testing/e2e/colors.mjs';
 import {exerciseOfficialTheme} from '../src/testing/e2e/official-theme.mjs';
 import {exerciseInteractiveDomEffects} from '../src/testing/e2e/dom-effects.mjs';
+import {
+  installPrepaintRecorder,
+  readPrepaintRecord,
+  verifyPrepaintCascade,
+  verifyPrepaintedDocument,
+  waitForPrepaintExclusion,
+  waitForPrepaintReleased,
+} from '../src/testing/e2e/prepaint.mjs';
 import {verifyRgba8Quantization} from '../src/testing/e2e/rgba8-quantization.mjs';
 import {
   captureBaseline,
@@ -91,6 +99,12 @@ async function main() {
       url: fixture.url,
       colorScheme: 'dark',
     });
+    const expectedHost = new URL(fixture.url).host;
+    // The first document can load before the worker registers the
+    // document_start script; reload once it is registered.
+    await installPrepaintRecorder(session.page);
+    await waitForPrepaintExclusion({session, host: expectedHost, excluded: false, timeout: CONFIG.timeout});
+    await session.page.reload({waitUntil: 'networkidle'});
     try {
       await waitForProcessedState(session.page, CONFIG.timeout);
     } catch (error) {
@@ -101,11 +115,14 @@ async function main() {
       );
     }
 
+    await waitForPrepaintReleased(session.page, CONFIG.timeout);
+    const lightPrepaint = await readPrepaintRecord(session.page);
+    verifyPrepaintedDocument(lightPrepaint, 'light fixture');
+    const prepaintCascade = await verifyPrepaintCascade(session.page);
     const transformed = await readPageState(session.page);
     const initialMetrics = verifyTransformedState(transformed);
     const interactionMetrics = await exerciseInteractiveDomEffects(session.page, CONFIG.timeout);
 
-    const expectedHost = new URL(fixture.url).host;
     await session.page.emulateMedia({colorScheme: 'light'});
     await waitForRestoredState(session.page, CONFIG.timeout);
     const popupLight = await inspectCurrentPopup({
@@ -145,6 +162,12 @@ async function main() {
     await waitForRestoredState(session.page, CONFIG.timeout);
     const restored = await readPageState(session.page);
     verifyRestoredState(restored);
+    // A disabled host must never get the dark base, not even for one frame.
+    await waitForPrepaintExclusion({session, host: expectedHost, excluded: true, timeout: CONFIG.timeout});
+    await session.page.reload({waitUntil: 'networkidle'});
+    await waitForRestoredState(session.page, CONFIG.timeout);
+    const disabledPrepaint = await readPrepaintRecord(session.page);
+    assert.equal(disabledPrepaint.painted, null, 'A disabled host was painted with the dark base');
 
     const enableTransition = await setCurrentHostEnabled({
       session,
@@ -163,6 +186,7 @@ async function main() {
       timeout: CONFIG.timeout,
     });
     const nativeUrl = new URL('/native-dark.html', fixture.url).href;
+    await waitForPrepaintExclusion({session, host: expectedHost, excluded: false, timeout: CONFIG.timeout});
     await session.page.goto(nativeUrl, {waitUntil: 'networkidle'});
     const nativePopup = await inspectCurrentPopup({
       session,
@@ -179,6 +203,8 @@ async function main() {
       'Native-dark state should retain a manual force-on escape hatch');
     const nativeState = await readNativeDarkState(session.page);
     verifyNativeDarkState(nativeState);
+    const nativePrepaint = await readPrepaintRecord(session.page);
+    verifyPrepaintedDocument(nativePrepaint, 'native-dark fixture');
     await session.page.waitForTimeout(250);
     const animationBefore = await animationCurrentTime(session.page);
 
@@ -236,6 +262,8 @@ async function main() {
     assert.equal(officialPopup.badge, 'Site dark');
     const officialState = await readOfficialThemeState(session.page);
     verifyOfficialThemeState(officialState);
+    const officialPrepaint = await readPrepaintRecord(session.page);
+    verifyPrepaintedDocument(officialPrepaint, 'official-theme fixture');
 
     await session.page.emulateMedia({colorScheme: 'light'});
     await session.page.waitForFunction(() =>
@@ -284,6 +312,13 @@ async function main() {
         },
       },
       officialRegression,
+      prepaint: {
+        light: lightPrepaint,
+        disabled: disabledPrepaint,
+        nativeDark: nativePrepaint,
+        official: officialPrepaint,
+        cascade: prepaintCascade,
+      },
       officialTheme: {
         url: officialUrl,
         state: officialState,
