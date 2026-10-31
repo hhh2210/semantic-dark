@@ -14,6 +14,8 @@ const ACTIVE_ATTRIBUTE = 'data-semantic-dark-active';
 const MAX_OFFICIAL_ATTEMPTS = 2;
 // Bounds how long the pre-paint can outlive activation if mapping never drains.
 const PREPAINT_RELEASE_TIMEOUT_MS = 3000;
+// Painted frames on which a natively dark page may release the pre-paint early.
+const EARLY_DARK_FRAMES = 3;
 
 export interface ThemeEngineLike {
   update(config: ThemeConfig): void;
@@ -40,6 +42,7 @@ export interface ThemeControllerOptions {
    */
   prepaint?: boolean;
   prepaintTimeout?: () => Promise<void>;
+  frame?: (callback: () => void) => void;
 }
 
 export class ThemeController {
@@ -50,6 +53,7 @@ export class ThemeController {
   private readonly onStatus: ((status: PageThemeStatus) => void) | undefined;
   private readonly prepaintRequested: boolean;
   private readonly prepaintTimeout: () => Promise<void>;
+  private readonly frame: (callback: () => void) => void;
   private active = false;
   private prepainted = false;
   private prepaintRelease = 0;
@@ -79,6 +83,7 @@ export class ThemeController {
     this.officialTheme = options.officialTheme ?? new OfficialThemeLane();
     this.prepaintRequested = options.prepaint ?? false;
     this.prepaintTimeout = options.prepaintTimeout ?? (() => delay(PREPAINT_RELEASE_TIMEOUT_MS));
+    this.frame = options.frame ?? ((callback) => { void nextFrame().then(callback); });
     this.status = {
       mode: this.config.mode,
       effectiveEnabled: false,
@@ -94,6 +99,7 @@ export class ThemeController {
     this.prepainted = document.documentElement.hasAttribute(PREPAINT_ATTRIBUTE);
     if (!this.prepainted && this.prepaintRequested && (this.config.mode === 'on' ||
       (this.config.mode === 'auto' && this.detector.prefersDark()))) this.applyPrepaint();
+    if (this.prepainted && this.config.mode === 'auto') this.releasePrepaintIfAuthoredDark(EARLY_DARK_FRAMES);
     await this.reconcile(true);
   }
 
@@ -413,6 +419,25 @@ export class ThemeController {
     const mapped = this.engines.dom.whenIdle?.() ?? Promise.resolve();
     void Promise.race([mapped, this.prepaintTimeout()]).then(() => {
       if (release === this.prepaintRelease) this.releasePrepaint();
+    });
+  }
+
+  // A natively dark page usually reads dark from its first frame. Releasing
+  // there keeps its own surfaces instead of the flattened base until the full
+  // probe settles; a wrong call only falls back to the unpainted behavior.
+  private releasePrepaintIfAuthoredDark(frames: number): void {
+    this.frame(() => {
+      // Every decision either releases the base or activates; a pending
+      // official candidate would read as dark before it is confirmed.
+      if (!this.prepainted || this.active || this.officialTheme.isApplied()) return;
+      if (document.body) {
+        if (this.sampleAuthoredTheme().kind === 'native-dark') {
+          this.releasePrepaint();
+          return;
+        }
+        frames -= 1;
+      }
+      if (frames > 0) this.releasePrepaintIfAuthoredDark(frames);
     });
   }
 

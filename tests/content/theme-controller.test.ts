@@ -140,7 +140,7 @@ function harness(
   detector: FakeDetector,
   settle = async (): Promise<void> => {},
   official: FakeOfficial = inertOfficial(),
-  options: Pick<ThemeControllerOptions, 'prepaint' | 'prepaintTimeout'> = {},
+  options: Pick<ThemeControllerOptions, 'prepaint' | 'prepaintTimeout' | 'frame'> = {},
   dom: FakeEngine = new FakeEngine(),
 ) {
   const svg = new FakeEngine();
@@ -150,6 +150,8 @@ function harness(
     stableDelay: async () => {},
     debounceMs: 0,
     officialTheme: official,
+    // Frames only run when a test steps them.
+    frame: () => {},
     ...options,
   });
   return {controller, dom, svg, image, official};
@@ -1031,5 +1033,97 @@ describe('ThemeController adopting a document_start base', () => {
     await state.controller.start();
     expect(state.controller.getStatus().decision).toBe('native-dark');
     expect(prepainted()).toBe(false);
+  });
+});
+
+describe('ThemeController early release on natively dark pages', () => {
+  function frames() {
+    const queue: Array<() => void> = [];
+    return {queue, frame: (callback: () => void) => { queue.push(callback); }, step: () => queue.shift()?.()};
+  }
+
+  it('drops the base at the first frame of a page that already reads natively dark', async () => {
+    const waiting = deferred();
+    const painted = frames();
+    const detector = new FakeDetector(result('native-dark'), result('native-dark'));
+    const state = harness('auto', detector, () => waiting.promise, inertOfficial(),
+      {prepaint: true, frame: painted.frame});
+    const starting = state.controller.start();
+    expect(prepainted()).toBe(true);
+
+    painted.step();
+    expect(prepainted()).toBe(false);
+    expect(detector.prepaintMarkers).toEqual([false]);
+    // The probe still decides on its own evidence.
+    expect(state.controller.getStatus().decision).toBe('pending');
+    waiting.resolve();
+    await starting;
+    expect(state.controller.getStatus().decision).toBe('native-dark');
+    expect(painted.queue).toEqual([]);
+  });
+
+  it('keeps the base when the first frames do not read natively dark', async () => {
+    const waiting = deferred();
+    const painted = frames();
+    const dom = new MappingEngine();
+    const detector = new FakeDetector(
+      result('ambiguous'), result('light'), result('light'), result('light'), result('light'),
+    );
+    const state = harness('auto', detector, () => waiting.promise, inertOfficial(),
+      {prepaint: true, frame: painted.frame}, dom);
+    const starting = state.controller.start();
+    painted.step();
+    painted.step();
+    painted.step();
+    expect(painted.queue).toEqual([]);
+    expect(prepainted()).toBe(true);
+
+    waiting.resolve();
+    await starting;
+    expect(state.controller.getStatus().decision).toBe('applied-light');
+    expect(prepainted()).toBe(true);
+    dom.idle.resolve();
+    await until(() => !prepainted());
+  });
+
+  it('stops checking once the probe has decided', async () => {
+    const painted = frames();
+    const detector = new FakeDetector(result('light'), result('light'));
+    const state = harness('auto', detector, async () => {}, inertOfficial(),
+      {prepaint: true, frame: painted.frame}, new MappingEngine());
+    await state.controller.start();
+    expect(state.controller.getStatus().decision).toBe('applied-light');
+
+    painted.step();
+    expect(detector.prepaintMarkers).toHaveLength(2);
+    expect(painted.queue).toEqual([]);
+    expect(prepainted()).toBe(true);
+  });
+
+  it('does not take a pending official candidate for a natively dark page', async () => {
+    const painted = frames();
+    const official = new WaitingOfficial();
+    const detector = new FakeDetector(result('light'), result('light'), result('native-dark'));
+    const state = harness('auto', detector, async () => {}, official, {prepaint: true, frame: painted.frame});
+    const starting = state.controller.start();
+    await until(() => official.waits.length === 1);
+
+    detector.samples.unshift(result('native-dark'));
+    painted.step();
+    expect(prepainted()).toBe(true);
+    detector.samples.shift();
+    official.waits[0]!.resolve();
+    await starting;
+    expect(state.controller.getStatus().decision).toBe('official-dark');
+    expect(prepainted()).toBe(false);
+  });
+
+  it('never releases a forced-on base early', async () => {
+    const painted = frames();
+    const state = harness('on', new FakeDetector(result('native-dark')), async () => {}, inertOfficial(),
+      {prepaint: true, frame: painted.frame}, new MappingEngine());
+    await state.controller.start();
+    expect(painted.queue).toEqual([]);
+    expect(prepainted()).toBe(true);
   });
 });
