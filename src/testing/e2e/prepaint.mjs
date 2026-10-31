@@ -42,9 +42,9 @@ export async function waitForPrepaintExclusion({session, host, excluded, timeout
   const pattern = `*://${host.replace(/:\d+$/, '')}/*`;
   const deadline = Date.now() + timeout;
   for (;;) {
+    // A cold worker may not have registered the script yet.
     const [script] = await worker.evaluate(() => chrome.scripting.getRegisteredContentScripts());
-    assert.ok(script, 'Pre-paint content script is not registered');
-    if ((script.excludeMatches ?? []).includes(pattern) === excluded) return script;
+    if (script && (script.excludeMatches ?? []).includes(pattern) === excluded) return script;
     if (Date.now() > deadline) {
       throw new Error(`Pre-paint exclusion of ${pattern} did not become ${excluded}: ${JSON.stringify(script)}`);
     }
