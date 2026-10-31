@@ -1,0 +1,23 @@
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Quirks mode integration fixture</title>
+    <link rel="icon" href="data:,">
+    <style>
+      body { margin: 0; color: #000000; font: 16px/1.5 Verdana, Geneva, sans-serif; }
+      #quirks-main { width: 100%; background: #f6f6ef; }
+      #quirks-main td { height: 12000px; padding: 16px; vertical-align: top; }
+    </style>
+  </head>
+  <body>
+    <!-- No doctype: in quirks mode documentElement.clientHeight is the document height. -->
+    <table id="quirks-main" cellspacing="0" cellpadding="0">
+      <tr>
+        <td>
+          <p>A long legacy page without a doctype, many viewports tall.</p>
+          <p>Its light table surface must still be sampled within the viewport.</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
