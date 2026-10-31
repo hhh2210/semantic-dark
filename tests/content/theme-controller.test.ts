@@ -8,6 +8,7 @@ import type {OfficialThemeRecipe} from '../../src/content/official-theme-recipes
 import type {OfficialThemeLaneLike, OfficialThemeProbe} from '../../src/content/official-theme';
 import {
   ThemeController,
+  type ThemeControllerOptions,
   type ThemeEngineLike,
 } from '../../src/content/theme-controller';
 import {DEFAULT_THEME, type ThemeConfig, type ThemeMode} from '../../src/types';
@@ -55,6 +56,7 @@ class FakeDetector implements NativeThemeDetectorLike {
   private dark = true;
   readonly samples: NativeThemeDecision[];
   readonly activeMarkers: boolean[] = [];
+  readonly prepaintMarkers: boolean[] = [];
 
   constructor(...samples: NativeThemeDecision[]) {
     this.samples = [...samples];
@@ -63,6 +65,7 @@ class FakeDetector implements NativeThemeDetectorLike {
   prefersDark(): boolean { return this.dark; }
   sample(): NativeThemeDecision {
     this.activeMarkers.push(document.documentElement.hasAttribute('data-semantic-dark-active'));
+    this.prepaintMarkers.push(document.documentElement.hasAttribute(PREPAINT));
     return this.samples.shift() ?? result('ambiguous');
   }
 
@@ -113,9 +116,12 @@ class FakeOfficial implements OfficialThemeLaneLike {
 class FakeEngine implements ThemeEngineLike {
   readonly enabled: boolean[] = [];
   readonly configs: ThemeConfig[] = [];
+  readonly prepaintMarkers: boolean[] = [];
+  rescan?: () => void;
   update(config: ThemeConfig): void {
     this.enabled.push(config.enabled);
     this.configs.push(config);
+    this.prepaintMarkers.push(document.documentElement.hasAttribute(PREPAINT));
   }
 }
 
@@ -134,8 +140,9 @@ function harness(
   detector: FakeDetector,
   settle = async (): Promise<void> => {},
   official: FakeOfficial = inertOfficial(),
+  options: Pick<ThemeControllerOptions, 'prepaint' | 'prepaintTimeout'> = {},
+  dom: FakeEngine = new FakeEngine(),
 ) {
-  const dom = new FakeEngine();
   const svg = new FakeEngine();
   const image = new FakeEngine();
   const controller = new ThemeController(config(mode), detector, {dom, svg, image}, {
@@ -143,12 +150,16 @@ function harness(
     stableDelay: async () => {},
     debounceMs: 0,
     officialTheme: official,
+    ...options,
   });
   return {controller, dom, svg, image, official};
 }
 
+const PREPAINT = 'data-semantic-dark-prepaint';
+
 afterEach(() => {
   document.documentElement.removeAttribute('data-semantic-dark-active');
+  document.documentElement.removeAttribute(PREPAINT);
 });
 
 describe('ThemeController', () => {
@@ -775,4 +786,250 @@ it('treats a new body as fresh evidence even for an html-owned recipe', async ()
   } finally {
     controller.stop(); replacement.replaceWith(old);
   }
+});
+
+class MappingEngine extends FakeEngine {
+  idle = deferred();
+  whenIdle(): Promise<void> {
+    return this.idle.promise;
+  }
+}
+
+function prepainted(): boolean {
+  return document.documentElement.hasAttribute(PREPAINT);
+}
+
+describe('ThemeController pre-paint', () => {
+  it('keeps the dark base through a light probe until the transform has mapped the page', async () => {
+    const dom = new MappingEngine();
+    const detector = new FakeDetector(result('light'), result('light'));
+    const state = harness('auto', detector, async () => {}, inertOfficial(), {prepaint: true}, dom);
+
+    const starting = state.controller.start();
+    expect(prepainted()).toBe(true);
+    await starting;
+
+    expect(state.controller.getStatus().decision).toBe('applied-light');
+    expect(document.documentElement.hasAttribute('data-semantic-dark-active')).toBe(true);
+    expect(prepainted()).toBe(true);
+    // The probe and the engines read authored colors, never the base.
+    expect(detector.prepaintMarkers).toEqual([false, false]);
+    expect(dom.prepaintMarkers).toEqual([false]);
+    expect(state.svg.prepaintMarkers).toEqual([false]);
+
+    dom.idle.resolve();
+    await until(() => !prepainted());
+    expect(document.documentElement.hasAttribute('data-semantic-dark-active')).toBe(true);
+  });
+
+  it('removes the base when the page turns out to be natively dark', async () => {
+    const state = harness('auto', new FakeDetector(result('native-dark')), async () => {},
+      inertOfficial(), {prepaint: true});
+    await state.controller.start();
+
+    expect(state.controller.getStatus().decision).toBe('native-dark');
+    expect(prepainted()).toBe(false);
+    expect(document.documentElement.hasAttribute('data-semantic-dark-active')).toBe(false);
+    expect(state.dom.enabled).toEqual([]);
+  });
+
+  it('keeps the base while an official dark theme loads and drops it once confirmed', async () => {
+    const official = new WaitingOfficial();
+    const detector = new FakeDetector(result('light'), result('light'), result('native-dark'));
+    const state = harness('auto', detector, async () => {}, official, {prepaint: true});
+
+    const starting = state.controller.start();
+    await until(() => official.waits.length === 1);
+    expect(prepainted()).toBe(true);
+    official.waits[0]!.resolve();
+    await starting;
+
+    expect(state.controller.getStatus().decision).toBe('official-dark');
+    expect(prepainted()).toBe(false);
+    expect(document.documentElement.hasAttribute('data-semantic-dark-active')).toBe(false);
+    expect(detector.prepaintMarkers).toEqual([false, false, false]);
+  });
+
+  it('keeps the base through a failed official attempt until the fallback transform maps', async () => {
+    const dom = new MappingEngine();
+    const official = new FakeOfficial();
+    const detector = new FakeDetector(...Array.from({length: 5}, () => result('light')));
+    const state = harness('auto', detector, async () => {}, official, {prepaint: true}, dom);
+    await state.controller.start();
+
+    expect(state.controller.getStatus().decision).toBe('applied-light');
+    expect(official.applied).toBe(false);
+    expect(prepainted()).toBe(true);
+    dom.idle.resolve();
+    await until(() => !prepainted());
+  });
+
+  it.each(['ambiguous', 'forced-colors'] as const)('fails closed to the authored page on %s evidence', async (kind) => {
+    const state = harness('auto', new FakeDetector(result(kind)), async () => {}, inertOfficial(),
+      {prepaint: true});
+    await state.controller.start();
+
+    expect(state.controller.getStatus().decision).toBe(kind);
+    expect(prepainted()).toBe(false);
+  });
+
+  it('removes the base when the probe throws', async () => {
+    const state = harness('auto', new FakeDetector(), async () => { throw new Error('probe'); },
+      inertOfficial(), {prepaint: true});
+    await state.controller.start();
+
+    expect(state.controller.getStatus().reason).toBe('source-theme-probe-failed');
+    expect(prepainted()).toBe(false);
+  });
+
+  it('never paints a base on a disabled host or while the system is light', async () => {
+    const writes: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => { writes.push(...records); });
+    observer.observe(document.documentElement, {attributes: true, attributeFilter: [PREPAINT]});
+    const off = harness('off', new FakeDetector(result('light'), result('light')), async () => {},
+      inertOfficial(), {prepaint: true});
+    await off.controller.start();
+    expect(off.controller.getStatus().decision).toBe('user-off');
+
+    const detector = new FakeDetector(result('light'), result('light'));
+    detector.setSystemDark(false);
+    const light = harness('auto', detector, async () => {}, inertOfficial(), {prepaint: true});
+    await light.controller.start();
+    expect(light.controller.getStatus().decision).toBe('system-light');
+    // Not even briefly: a dark frame on a disabled host is itself a flash.
+    writes.push(...observer.takeRecords());
+    observer.disconnect();
+    expect(writes).toEqual([]);
+  });
+
+  it('paints no base unless the entry point asks for one', async () => {
+    const dom = new MappingEngine();
+    const state = harness('auto', new FakeDetector(result('light'), result('light')), async () => {},
+      inertOfficial(), {}, dom);
+    const starting = state.controller.start();
+    expect(prepainted()).toBe(false);
+    await starting;
+    expect(state.controller.getStatus().decision).toBe('applied-light');
+    expect(prepainted()).toBe(false);
+  });
+
+  it('removes the base when the user disables the host mid-probe', async () => {
+    const waiting = deferred();
+    const state = harness('auto', new FakeDetector(result('light'), result('light')), () => waiting.promise,
+      inertOfficial(), {prepaint: true});
+    const starting = state.controller.start();
+    expect(prepainted()).toBe(true);
+
+    await state.controller.update(config('off'));
+    expect(prepainted()).toBe(false);
+    waiting.resolve();
+    await starting;
+    expect(state.controller.getStatus().decision).toBe('user-off');
+    expect(prepainted()).toBe(false);
+    expect(state.dom.enabled).toEqual([]);
+  });
+
+  it('removes the base when the system turns light mid-probe', async () => {
+    const waiting = deferred();
+    const detector = new FakeDetector(result('light'), result('light'));
+    const state = harness('auto', detector, () => waiting.promise, inertOfficial(), {prepaint: true});
+    const starting = state.controller.start();
+    expect(prepainted()).toBe(true);
+
+    detector.setSystemDark(false);
+    expect(prepainted()).toBe(false);
+    waiting.resolve();
+    await starting;
+    expect(state.controller.getStatus().decision).toBe('system-light');
+  });
+
+  it('keeps a force-on base until the transform has mapped the page', async () => {
+    const dom = new MappingEngine();
+    const state = harness('on', new FakeDetector(), async () => {}, inertOfficial(), {prepaint: true}, dom);
+    await state.controller.start();
+
+    expect(state.controller.getStatus().decision).toBe('user-on');
+    expect(prepainted()).toBe(true);
+    expect(dom.prepaintMarkers).toEqual([false]);
+    dom.idle.resolve();
+    await until(() => !prepainted());
+  });
+
+  it('bounds the wait for a mapping pass that never drains', async () => {
+    const timeout = deferred();
+    const state = harness('auto', new FakeDetector(result('light'), result('light')), async () => {},
+      inertOfficial(), {prepaint: true, prepaintTimeout: () => timeout.promise}, new MappingEngine());
+    await state.controller.start();
+    expect(prepainted()).toBe(true);
+
+    timeout.resolve();
+    await until(() => !prepainted());
+  });
+
+  it('drops a base still waiting on mapping when a recheck finds native dark', async () => {
+    const dom = new MappingEngine();
+    const detector = new FakeDetector(result('light'), result('light'), result('native-dark'));
+    const state = harness('auto', detector, async () => {}, inertOfficial(), {prepaint: true}, dom);
+    await state.controller.start();
+    expect(prepainted()).toBe(true);
+
+    await state.controller.recheck();
+    expect(state.controller.getStatus().decision).toBe('native-dark');
+    expect(prepainted()).toBe(false);
+    dom.idle.resolve();
+    await Promise.resolve();
+    expect(prepainted()).toBe(false);
+  });
+
+  it('lifts the base while active engines rescan', async () => {
+    const dom = new MappingEngine();
+    const svg: string[] = [];
+    const state = harness('auto', new FakeDetector(result('light'), result('light')), async () => {},
+      inertOfficial(), {prepaint: true}, dom);
+    state.svg.rescan = () => { svg.push(String(prepainted())); };
+    await state.controller.start();
+
+    state.controller.rescan();
+    expect(svg).toEqual(['false']);
+    expect(prepainted()).toBe(true);
+  });
+});
+
+describe('ThemeController adopting a document_start base', () => {
+  it('removes a base painted before config said the host is off', async () => {
+    document.documentElement.setAttribute(PREPAINT, '');
+    const writes: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => { writes.push(...records); });
+    observer.observe(document.documentElement, {attributes: true, attributeFilter: [PREPAINT]});
+    const state = harness('off', new FakeDetector(), async () => {}, inertOfficial());
+
+    const starting = state.controller.start();
+    expect(prepainted()).toBe(false);
+    await starting;
+    writes.push(...observer.takeRecords());
+    observer.disconnect();
+    expect(writes.map((record) => record.oldValue ?? 'removed')).toHaveLength(1);
+  });
+
+  it('keeps an adopted base until the light page is mapped', async () => {
+    document.documentElement.setAttribute(PREPAINT, '');
+    const dom = new MappingEngine();
+    const detector = new FakeDetector(result('light'), result('light'));
+    const state = harness('auto', detector, async () => {}, inertOfficial(), {}, dom);
+    await state.controller.start();
+
+    expect(state.controller.getStatus().decision).toBe('applied-light');
+    expect(detector.prepaintMarkers).toEqual([false, false]);
+    expect(prepainted()).toBe(true);
+    dom.idle.resolve();
+    await until(() => !prepainted());
+  });
+
+  it('removes an adopted base when the page is natively dark', async () => {
+    document.documentElement.setAttribute(PREPAINT, '');
+    const state = harness('auto', new FakeDetector(result('native-dark')), async () => {}, inertOfficial());
+    await state.controller.start();
+    expect(state.controller.getStatus().decision).toBe('native-dark');
+    expect(prepainted()).toBe(false);
+  });
 });
