@@ -5,12 +5,15 @@ import {
   type ThemeConfig,
 } from '../types';
 import type {NativeThemeDecision, NativeThemeDetectorLike} from './native-dark';
-import {beginDocumentTransitionGuard, endDocumentTransitionGuard, flushDocumentStyle}
-  from './dom-style-contract';
+import {
+  ACTIVE_ATTRIBUTE,
+  beginDocumentTransitionGuard,
+  endDocumentTransitionGuard,
+  flushDocumentStyle,
+} from './dom-style-contract';
 import {OfficialThemeLane, officialThemeLooksApplied, type OfficialThemeLaneLike} from './official-theme';
 import {officialThemeCandidates, officialThemeRecipeKeys} from './official-theme-recipes';
 import {PREPAINT_ATTRIBUTE} from './prepaint';
-const ACTIVE_ATTRIBUTE = 'data-semantic-dark-active';
 const MAX_OFFICIAL_ATTEMPTS = 2;
 // Bounds how long the pre-paint can outlive activation if mapping never drains.
 const PREPAINT_RELEASE_TIMEOUT_MS = 3000;
@@ -126,7 +129,9 @@ export class ThemeController {
   }
 
   rescan(): void {
-    if (!this.active) return;
+    // A pending official candidate would be sampled into the mapping; its
+    // rollback rescans the restored page instead.
+    if (!this.active || this.pendingOfficialGeneration !== null) return;
     this.withAuthoredStyles(() => {
       this.engines.dom.rescan?.();
       this.engines.svg.rescan?.();
@@ -292,7 +297,8 @@ export class ThemeController {
       this.officialRecipeKeys = keys;
     }
     if (this.officialFailures >= MAX_OFFICIAL_ATTEMPTS || !probe.capable) return 'unavailable';
-    this.deactivate();
+    // Keep an active transform painted while a candidate loads. Sampling hides it
+    // only within one task, so a failed retry never exposes the light page.
     const candidates = officialThemeCandidates(probe);
     for (const [index, recipes] of candidates.entries()) {
       // The previous candidate may have overlapped a site/SPA theme change.
@@ -313,6 +319,7 @@ export class ThemeController {
       if (!this.isCurrentProbe(generation)) return 'failed';
       const after = this.sampleAuthoredTheme();
       if (officialThemeLooksApplied(after)) {
+        this.deactivate();
         this.officialFailures = 0;
         this.pendingOfficialGeneration = null;
         this.releasePrepaint();
@@ -339,6 +346,8 @@ export class ThemeController {
     this.pendingOfficialGeneration = null;
     if (this.officialTheme.isApplied()) {
       this.mutateAuthoredTheme(() => this.officialTheme.restore());
+      // Content mapped while the candidate was applied read its colors.
+      this.rescan();
     }
   }
 

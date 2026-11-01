@@ -1,6 +1,8 @@
 import {mapColor} from '../color/index';
 import {transformInlineSvg, type SvgColorRequest, type SvgTransformSession} from '../svg/index';
 import type {ThemeConfig} from '../types';
+import {withDocumentOverridesHidden} from './dom-style-contract';
+import {authoredBackgroundColor} from './dom-style-mapper';
 
 function isTransparent(color: string): boolean {
   const value = color.replaceAll(' ', '').toLowerCase();
@@ -10,7 +12,8 @@ function isTransparent(color: string): boolean {
 function sourceBackground(svg: SVGSVGElement): string {
   let current: Element | null = svg;
   while (current) {
-    const color = getComputedStyle(current).backgroundColor;
+    // Ancestors may already carry the DOM engine's dark mapping.
+    const color = authoredBackgroundColor(current);
     if (!isTransparent(color)) return color;
     current = current.parentElement;
   }
@@ -65,7 +68,9 @@ export class SvgThemeEngine {
     if (!this.config.enabled) return;
     for (const session of this.sessions.values()) session.restore();
     this.sessions.clear();
-    this.scan(document);
+    // DOM mappings persist through a rescan and may be stale, so read authored
+    // backdrops directly instead of the backgrounds recorded at mapping time.
+    withDocumentOverridesHidden(() => this.scan(document));
   }
 
   stop(): void {

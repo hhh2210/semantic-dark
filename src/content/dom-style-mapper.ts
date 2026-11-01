@@ -1,6 +1,6 @@
 import {mapColor, mapCssGradient, parseCssColor} from '../color/index';
 import type {ThemeConfig} from '../types';
-import {DOM_ATTRIBUTE as ATTR, DOM_VARIABLE as VAR} from './dom-style-contract';
+import {ACTIVE_ATTRIBUTE, DOM_ATTRIBUTE as ATTR, DOM_VARIABLE as VAR} from './dom-style-contract';
 
 type PseudoKind = 'before' | 'after';
 type BorderSide = 'top' | 'right' | 'bottom' | 'left';
@@ -19,6 +19,19 @@ interface PaintSnapshot {
 }
 
 const SIDES = ['top', 'right', 'bottom', 'left'] as const;
+// Authored backgrounds recorded when an element was last mapped. Remapping
+// happens in place, so while an override is in effect this is the only way to
+// read the authored value; it can be stale until the element is remapped.
+const authoredBackgrounds = new WeakMap<Element, string>();
+
+export function authoredBackgroundColor(element: Element): string {
+  const recorded = authoredBackgrounds.get(element);
+  // Shadow-root overrides are not scoped to the document marker.
+  const overridden = recorded !== undefined && (element.getRootNode() instanceof ShadowRoot ||
+    document.documentElement.hasAttribute(ACTIVE_ATTRIBUTE));
+  return overridden ? recorded : getComputedStyle(element).backgroundColor;
+}
+
 const SUPPORTS_PSEUDO_STYLES = typeof CSS !== 'undefined' &&
   CSS.supports('selector(::before)');
 
@@ -182,6 +195,7 @@ export function mapElementStyles(element: HTMLElement, config: ThemeConfig): boo
   if (!isTransparent(style.backgroundColor)) {
     element.style.setProperty(VAR.background, background);
     element.setAttribute(ATTR.background, '');
+    authoredBackgrounds.set(element, style.backgroundColor);
     touched = true;
   }
   if (gradient) {
@@ -235,6 +249,7 @@ export function mapElementStyles(element: HTMLElement, config: ThemeConfig): boo
 }
 
 export function restoreElementStyles(element: HTMLElement): void {
+  authoredBackgrounds.delete(element);
   for (const attribute of Object.values(ATTR)) element.removeAttribute(attribute);
   for (const variable of Object.values(VAR)) element.style.removeProperty(variable);
 }
