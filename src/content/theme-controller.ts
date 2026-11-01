@@ -10,6 +10,7 @@ import {
   beginDocumentTransitionGuard,
   endDocumentTransitionGuard,
   flushDocumentStyle,
+  withPrepaintLifted,
 } from './dom-style-contract';
 import {OfficialThemeLane, officialThemeLooksApplied, type OfficialThemeLaneLike} from './official-theme';
 import {officialThemeCandidates, officialThemeRecipeKeys} from './official-theme-recipes';
@@ -131,7 +132,7 @@ export class ThemeController {
 
   rescan(): void {
     if (!this.active || this.pendingOfficialGeneration !== null) return;
-    this.withAuthoredStyles(() => {
+    withPrepaintLifted(() => {
       this.engines.dom.rescan?.();
       this.engines.svg.rescan?.();
     });
@@ -161,7 +162,7 @@ export class ThemeController {
     if (this.config.mode === 'on') {
       this.stopDetector();
       this.releaseOfficialTheme();
-      if (this.active) this.withAuthoredStyles(() => this.applyToEngines(true));
+      if (this.active) withPrepaintLifted(() => this.applyToEngines(true));
       this.activate();
       this.releasePrepaintOnceMapped();
       this.setStatus('user-on', 'forced-on-by-user');
@@ -170,7 +171,7 @@ export class ThemeController {
 
     this.startDetector();
     if (this.pauseForSystemLight()) return;
-    if (this.active) this.withAuthoredStyles(() => this.applyToEngines(true));
+    if (this.active) withPrepaintLifted(() => this.applyToEngines(true));
     if (modeChanged || this.status.decision === 'pending' || this.status.decision === 'system-light') {
       await this.probe();
     }
@@ -451,24 +452,6 @@ export class ThemeController {
       }
       if (frames > 0) this.releasePrepaintIfAuthoredDark(frames);
     });
-  }
-
-  // Engines must read authored colors, never the pre-paint. It is lifted only
-  // within this task and under the transition guard, so no frame shows it gone.
-  private withAuthoredStyles(run: () => void): void {
-    if (!this.prepainted) {
-      run();
-      return;
-    }
-    const root = document.documentElement;
-    beginDocumentTransitionGuard(root);
-    root.removeAttribute(PREPAINT_ATTRIBUTE);
-    try {
-      run();
-    } finally {
-      root.setAttribute(PREPAINT_ATTRIBUTE, '');
-      endDocumentTransitionGuard(root);
-    }
   }
 
   private applyToEngines(enabled: boolean): void {
