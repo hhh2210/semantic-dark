@@ -4,6 +4,7 @@ import {
   domOverrideCss,
   endDomStyleUpdate,
   needsTransitionGuard,
+  withPrepaintExempt,
 } from './dom-style-contract';
 import {DomStateObserver} from './dom-state-observer';
 import {mapElementStyles, restoreElementStyles} from './dom-style-mapper';
@@ -297,7 +298,9 @@ export class DomThemeEngine {
   // Restores and remaps a tree-ordered batch within one task: authored sources
   // must be read without our override, but nothing is painted in between.
   // Restoring the whole batch first costs one style invalidation instead of one
-  // per element.
+  // per element. Restoring also clears the transition guard's marker, so it
+  // comes first. The rest of the batch cannot animate, so the pre-paint's
+  // exemption needs no guard of its own.
   private processBatch(elements: readonly Element[]): void {
     const batch: HTMLElement[] = [];
     for (const element of elements) {
@@ -306,13 +309,15 @@ export class DomThemeEngine {
       if (element instanceof HTMLElement) batch.push(element);
     }
     const guarded = batch.filter(needsTransitionGuard);
+    for (const element of batch) restoreElementStyles(element);
     for (const element of guarded) beginDomStyleUpdate(element);
     try {
-      for (const element of batch) restoreElementStyles(element);
-      for (const element of batch) {
-        if (mapElementStyles(element, this.config)) this.touched.add(element);
-        else this.touched.delete(element);
-      }
+      withPrepaintExempt(batch, () => {
+        for (const element of batch) {
+          if (mapElementStyles(element, this.config)) this.touched.add(element);
+          else this.touched.delete(element);
+        }
+      });
     } finally {
       for (const element of guarded) endDomStyleUpdate(element);
     }

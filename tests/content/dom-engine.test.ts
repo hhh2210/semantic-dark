@@ -1,6 +1,8 @@
+import {readFileSync} from 'node:fs';
 import {afterEach, describe, expect, it} from 'vitest';
 import {DomThemeEngine} from '../../src/content/dom-engine';
 import {DOM_ATTRIBUTE, domOverrideCss} from '../../src/content/dom-style-contract';
+import {PREPAINT_ATTRIBUTE} from '../../src/content/prepaint';
 import {DEFAULT_THEME} from '../../src/types';
 
 const running: DomThemeEngine[] = [];
@@ -14,6 +16,7 @@ afterEach(() => {
   running.length = 0;
   document.documentElement.innerHTML = '<head></head><body></body>';
   document.documentElement.removeAttribute('data-semantic-dark-active');
+  document.documentElement.removeAttribute(PREPAINT_ATTRIBUTE);
 });
 
 describe('DomThemeEngine', () => {
@@ -62,6 +65,37 @@ describe('DomThemeEngine', () => {
     const idle = engine.whenIdle();
     engine.stop();
     await expect(idle).resolves.toBeUndefined();
+  });
+
+  it('reads authored backgrounds that the pre-paint keeps transparent', async () => {
+    const sheet = document.createElement('style');
+    sheet.textContent = `${readFileSync('extension/prepaint.css', 'utf8')}
+      body { background-color: rgb(252, 252, 252); }
+      .panel { background-color: #fff; }`;
+    document.head.append(sheet);
+    document.body.innerHTML = '<p>Text</p>';
+    document.documentElement.setAttribute('data-semantic-dark-active', '');
+    document.documentElement.setAttribute(PREPAINT_ATTRIBUTE, '');
+    expect(getComputedStyle(document.body).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+
+    engine.start();
+    await engine.whenIdle();
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.textContent = 'Inserted';
+    document.body.append(panel);
+    await Promise.resolve();
+    await engine.whenIdle();
+
+    for (const surface of [document.body, panel]) {
+      expect(surface.hasAttribute(DOM_ATTRIBUTE.background)).toBe(true);
+      // The exemption from the pre-paint lasts only for the read.
+      expect(surface.hasAttribute(DOM_ATTRIBUTE.updating)).toBe(false);
+    }
+    // Releasing the pre-paint is the controller's call, once mapping is idle.
+    expect(document.documentElement.hasAttribute(PREPAINT_ATTRIBUTE)).toBe(true);
   });
 
   it('maps authored backgrounds, text, and borders through role variables', async () => {

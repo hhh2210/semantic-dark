@@ -1,3 +1,5 @@
+import {PREPAINT_ATTRIBUTE} from './prepaint';
+
 export const DOM_ATTRIBUTE = {
   color: 'data-semantic-dark-color',
   background: 'data-semantic-dark-background',
@@ -193,6 +195,36 @@ export function withDocumentOverridesHidden<T>(read: () => T): T {
     return read();
   } finally {
     root.setAttribute(ACTIVE_ATTRIBUTE, '');
+    endDocumentTransitionGuard(root);
+  }
+}
+
+// While the pre-paint is up, prepaint.css keeps authored backgrounds transparent
+// except on elements marked as updating. Marks `elements` for the duration of
+// `read`, without forcing a style recalc, so they read their own backgrounds.
+// Only elements that cannot animate the change back may be marked this way.
+export function withPrepaintExempt<T>(elements: readonly HTMLElement[], read: () => T): T {
+  if (!document.documentElement.hasAttribute(PREPAINT_ATTRIBUTE)) return read();
+  const marked = elements.filter((element) => !element.hasAttribute(DOM_ATTRIBUTE.updating));
+  for (const element of marked) element.setAttribute(DOM_ATTRIBUTE.updating, '');
+  try {
+    return read();
+  } finally {
+    for (const element of marked) element.removeAttribute(DOM_ATTRIBUTE.updating);
+  }
+}
+
+// Runs `read` without the pre-paint, for reads that can reach any element.
+// Restored within one task under the transition guard, so no frame shows it gone.
+export function withPrepaintLifted<T>(read: () => T): T {
+  const root = document.documentElement;
+  if (!root.hasAttribute(PREPAINT_ATTRIBUTE)) return read();
+  beginDocumentTransitionGuard(root);
+  root.removeAttribute(PREPAINT_ATTRIBUTE);
+  try {
+    return read();
+  } finally {
+    root.setAttribute(PREPAINT_ATTRIBUTE, '');
     endDocumentTransitionGuard(root);
   }
 }

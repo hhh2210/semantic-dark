@@ -1,7 +1,7 @@
 import {mapColor} from '../color/index';
 import {transformInlineSvg, type SvgColorRequest, type SvgTransformSession} from '../svg/index';
 import type {ThemeConfig} from '../types';
-import {withDocumentOverridesHidden} from './dom-style-contract';
+import {withDocumentOverridesHidden, withPrepaintLifted} from './dom-style-contract';
 import {authoredBackgroundColor} from './dom-style-mapper';
 
 function isTransparent(color: string): boolean {
@@ -42,12 +42,21 @@ export class SvgThemeEngine {
     if (!this.config.enabled) return;
     this.scan(root);
     this.observer = new MutationObserver((records) => {
+      const svgs: SVGSVGElement[] = [];
       for (const record of records) {
         for (const node of record.addedNodes) {
-          if (node instanceof SVGSVGElement) this.apply(node);
-          else if (node instanceof Element) this.scan(node);
+          if (node instanceof SVGSVGElement) svgs.push(node);
+          else if (node instanceof Element) {
+            for (const svg of node.querySelectorAll<SVGSVGElement>('svg')) svgs.push(svg);
+          }
         }
       }
+      if (svgs.length === 0) return;
+      // Under the pre-paint, unmapped ancestors read transparent and the
+      // backdrop walk would end on its dark base.
+      withPrepaintLifted(() => {
+        for (const svg of svgs) this.apply(svg);
+      });
     });
     this.observer.observe(root, {subtree: true, childList: true});
   }
