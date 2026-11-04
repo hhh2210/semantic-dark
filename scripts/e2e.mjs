@@ -17,7 +17,7 @@ import {
   waitForProcessedState,
   waitForRestoredState,
 } from '../src/testing/e2e/assertions.mjs';
-import {contrastRatio, parseRgb} from '../src/testing/e2e/colors.mjs';
+import {contrastRatio, parseRgb, relativeLuminance} from '../src/testing/e2e/colors.mjs';
 import {exerciseOfficialTheme} from '../src/testing/e2e/official-theme.mjs';
 import {exerciseInteractiveDomEffects} from '../src/testing/e2e/dom-effects.mjs';
 import {verifyRgba8Quantization} from '../src/testing/e2e/rgba8-quantization.mjs';
@@ -53,6 +53,7 @@ const CONFIG = {
     ['/native-dark.css', ['native-dark.css', 'text/css; charset=utf-8']],
     ['/official-theme.html', ['official-theme.html', 'text/html; charset=utf-8']],
     ['/official-theme.css', ['official-theme.css', 'text/css; charset=utf-8']],
+    ['/quirks.html', ['quirks.html', 'text/html; charset=utf-8']],
   ]),
 };
 
@@ -162,6 +163,37 @@ async function main() {
       expectedHost,
       timeout: CONFIG.timeout,
     });
+    const quirksUrl = new URL('/quirks.html', fixture.url).href;
+    await session.page.goto(quirksUrl, {waitUntil: 'networkidle'});
+    const readQuirksState = () => session.page.evaluate(() => {
+      const surface = document.querySelector('#quirks-main');
+      if (!surface) throw new Error('Quirks fixture surface is missing');
+      return {
+        compatMode: document.compatMode,
+        rootClientHeight: document.documentElement.clientHeight,
+        innerHeight: window.innerHeight,
+        active: document.documentElement.hasAttribute('data-semantic-dark-active'),
+        surfaceBackground: getComputedStyle(surface).backgroundColor,
+        surfaceText: getComputedStyle(surface.querySelector('p')).color,
+      };
+    });
+    try {
+      await session.page.waitForFunction(() =>
+        document.documentElement.hasAttribute('data-semantic-dark-active') &&
+        document.querySelector('#quirks-main')?.hasAttribute('data-semantic-dark-background'),
+      undefined, {timeout: CONFIG.timeout});
+    } catch (error) {
+      throw new Error(`Quirks-mode page was not transformed:\n${JSON.stringify(await readQuirksState(), null, 2)}`,
+        {cause: error});
+    }
+    const quirksState = await readQuirksState();
+    assert.equal(quirksState.compatMode, 'BackCompat');
+    assert.ok(quirksState.rootClientHeight > quirksState.innerHeight * 10,
+      'Quirks fixture should be many viewports tall');
+    assert.ok(relativeLuminance(parseRgb(quirksState.surfaceBackground)) < 0.1,
+      'Quirks-mode light surface was not darkened');
+    assert.ok(contrastRatio(parseRgb(quirksState.surfaceText), parseRgb(quirksState.surfaceBackground)) >= 4.5,
+      'Quirks-mode text is unreadable after darkening');
     const nativeUrl = new URL('/native-dark.html', fixture.url).href;
     await session.page.goto(nativeUrl, {waitUntil: 'networkidle'});
     const nativePopup = await inspectCurrentPopup({
@@ -273,6 +305,7 @@ async function main() {
         enable: enableTransition,
         automatic: automaticTransition,
       },
+      quirks: {url: quirksUrl, state: quirksState},
       nativeDark: {
         url: nativeUrl,
         state: nativeState,

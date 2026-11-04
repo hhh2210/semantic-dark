@@ -112,8 +112,10 @@ export class NativeDarkDetector implements NativeThemeDetectorLike {
 
 function sampleViewport(negotiatedDark: boolean): Omit<NativeThemeEvidence,
   'forcedColors' | 'negotiatedDark' | 'declaredLight' | 'lightCanvas' | 'visibleContent' | 'rootDarkMarker'> {
-  const width = Math.max(document.documentElement.clientWidth, window.innerWidth);
-  const height = Math.max(document.documentElement.clientHeight, window.innerHeight);
+  // elementsFromPoint takes viewport coordinates. In quirks mode documentElement.client*
+  // measures the whole document, so it must not size the sample grid.
+  const width = window.innerWidth;
+  const height = window.innerHeight;
   const canvas = negotiatedDark ? srgb(18 / 255, 18 / 255, 18 / 255) : srgb(1, 1, 1);
   let known = 0;
   let dark = 0;

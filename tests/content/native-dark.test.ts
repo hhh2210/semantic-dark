@@ -249,6 +249,50 @@ describe('native theme classification', () => {
   });
 });
 
+describe('viewport sampling', () => {
+  // In quirks mode documentElement.clientHeight is the whole document, not the viewport.
+  it.each([
+    ['standards', 785],
+    ['quirks', 24_000],
+  ])('keeps every sample point inside the viewport in %s mode', (_mode, rootClientHeight) => {
+    const surface = document.createElement('div');
+    surface.style.backgroundColor = 'rgb(246, 246, 239)';
+    surface.style.color = 'rgb(0, 0, 0)';
+    document.body.append(surface);
+    const points: Array<[number, number]> = [];
+    const restore = [
+      stubProperty(document.documentElement, 'clientWidth', 1265),
+      stubProperty(document.documentElement, 'clientHeight', rootClientHeight),
+      stubProperty(window, 'innerWidth', 1280),
+      stubProperty(window, 'innerHeight', 800),
+      stubProperty(document, 'elementsFromPoint', (x: number, y: number) => {
+        points.push([x, y]);
+        // Like Chrome, a point outside the viewport hits nothing.
+        return x >= 0 && x < 1280 && y >= 0 && y < 800 ? [surface] : [];
+      }),
+    ];
+    try {
+      const {evidence} = new NativeDarkDetector().sample();
+      expect(points).toHaveLength(9);
+      expect(points.filter(([x, y]) => x >= 1280 || y >= 800)).toEqual([]);
+      expect(evidence.knownSamples).toBe(9);
+      expect(evidence.lightCoverage).toBe(1);
+    } finally {
+      for (const undo of restore.reverse()) undo();
+      surface.remove();
+    }
+  });
+});
+
+function stubProperty(target: object, key: string, value: unknown): () => void {
+  const own = Object.getOwnPropertyDescriptor(target, key);
+  Object.defineProperty(target, key, {configurable: true, value});
+  return () => {
+    if (own) Object.defineProperty(target, key, own);
+    else delete (target as Record<string, unknown>)[key];
+  };
+}
+
 describe('official root markers', () => {
   it.each([
     ['dark', 'true'], ['data-dark', 'true'], ['data-dark-mode', 'true'], ['darkmode', 'true'],
