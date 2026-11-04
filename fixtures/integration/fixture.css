@@ -235,3 +235,6 @@ a {
 #mixed-gradient { background:linear-gradient(#fff, #000); color:#777; }
 #pseudo-gradient::before { content:"Pseudo gradient"; display:block; height:80px; line-height:80px; padding:0 30px; background:linear-gradient(#333,#555); color:#ccc; }
 #backplate-case { background:#ddd; }
+
+#context-logo-parent { background:#fff; }
+#context-logo-parent.context-light { background:#000; }

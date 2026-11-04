@@ -4,7 +4,8 @@ import type {AssetObservation} from './action-policy';
 /** A numeric visibility check for opaque logo strokes over a simple solid backdrop. */
 export function logoActionContrast(observation: AssetObservation): Record<'keep' | 'dim' | 'backplate', number> | null {
   const c = observation.classification;
-  if (!observation.simpleBackdrop || c.kind !== 'icon' || c.confidence < 0.58 || c.features.transparentRatio <= 0.01) return null;
+  if (!observation.simpleBackdrop || c.kind !== 'icon' || !Number.isFinite(c.confidence) || c.confidence < 0.58 ||
+      !Number.isFinite(c.features.transparentRatio) || c.features.transparentRatio <= 0.01) return null;
   const canvas = parseCssColor(observation.canvasBackground);
   const parent = parseCssColor(observation.parentBackground);
   const element = parseCssColor(observation.elementBackground);

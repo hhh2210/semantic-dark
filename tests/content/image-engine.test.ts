@@ -151,6 +151,25 @@ describe('ImageThemeEngine action execution', () => {
     expect(revoke).toHaveBeenCalledWith('blob:diagram-fixture');
   });
 
+  it.each(['background', 'reparent'])('recomputes a completed logo decision after %s changes', async change => {
+    const {image, engine, provider, answer} = fixture(true);
+    try {
+      await vi.waitFor(() => expect(provider.decide).toHaveBeenCalledOnce());
+      answer({action: 'backplate'});
+      await vi.waitFor(() => expect(image.getAttribute('data-semantic-dark-image-filter')).toBe('backplate'));
+      provider.decide.mockImplementation(async () => ({action: 'keep'}));
+      if (change === 'background') document.body.style.backgroundColor = '#fff';
+      else { const parent = document.createElement('section'); parent.style.backgroundColor = '#fff'; parent.append(image); document.body.append(parent); }
+      await vi.waitFor(() => expect(image.getAttribute('data-semantic-dark-image-action')).toBe('provider:keep'));
+      expect(image.hasAttribute('data-semantic-dark-image-filter')).toBe(false);
+      expect(image.hasAttribute('data-semantic-dark-image-reading')).toBe(false);
+      expect(image.hasAttribute('data-semantic-dark-image-guard')).toBe(false);
+      const calls = provider.decide.mock.calls.length;
+      await new Promise(resolve => setTimeout(resolve, 120));
+      expect(provider.decide).toHaveBeenCalledTimes(calls);
+    } finally { engine.stop(); }
+  });
+
   it('reobserves the newest source after discarding an in-flight stale result', async () => {
     const {image, engine, provider, answer} = fixture();
     let fresh!: (value: unknown) => void;

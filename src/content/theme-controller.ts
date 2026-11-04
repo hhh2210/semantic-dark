@@ -136,6 +136,10 @@ export class ThemeController {
       this.engines.dom.rescan?.();
       this.engines.svg.rescan?.();
     });
+    // DOM remapping is queued; image decisions must sample its completed backdrop.
+    void Promise.resolve(this.engines.dom.whenIdle?.()).then(() => {
+      if (this.active && this.pendingOfficialGeneration === null) this.engines.image.rescan?.();
+    });
   }
 
   stop(): void {

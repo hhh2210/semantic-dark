@@ -17,6 +17,13 @@ export async function verifyMatrixContrast(page) {
     assert.ok(Math.min(...ratios) >= 4.5, `${id} contrast across rendered backgrounds: ${ratios}`);
     results.push({id, ratios});
   }
+  await page.locator('#context-logo').scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => document.querySelector('#context-logo')?.getAttribute('data-semantic-dark-image-action') === 'constraint:backplate');
+  await page.locator('#context-logo-parent').evaluate(element => element.classList.add('context-light'));
+  await page.waitForFunction(() => document.querySelector('#context-logo')?.getAttribute('data-semantic-dark-image-action') === 'heuristic:keep');
+  assert.equal(await page.locator('#context-logo').getAttribute('data-semantic-dark-image-filter'), null);
+  await page.locator('#context-logo-parent').evaluate(element => element.classList.remove('context-light'));
+  await page.waitForFunction(() => document.querySelector('#context-logo')?.getAttribute('data-semantic-dark-image-action') === 'constraint:backplate');
   const image = page.locator('#backplate-case');
   await image.evaluate(element => {
     element.setAttribute('data-semantic-dark-image-filter', 'backplate');
