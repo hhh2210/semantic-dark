@@ -191,6 +191,8 @@ describe('DomThemeEngine', () => {
   });
 
   it('remaps a class-changed element before the next paint', async () => {
+    // Unit scheduling is deterministic; real frame budgets are exercised in E2E.
+    vi.spyOn(performance, 'now').mockReturnValue(0);
     document.head.innerHTML = '<style>.card{background:#fff;color:#222}.card.selected{background:#ddf4ff}</style>';
     document.body.innerHTML = '<article id="card" class="card">Card</article>';
     const card = document.querySelector<HTMLElement>('#card')!;
@@ -230,6 +232,8 @@ describe('DomThemeEngine', () => {
   });
 
   it('maps an inserted host and its open shadow content before the next paint', async () => {
+    // Unit scheduling is deterministic; real frame budgets are exercised in E2E.
+    vi.spyOn(performance, 'now').mockReturnValue(0);
     const engine = new DomThemeEngine(DEFAULT_THEME);
     running.push(engine);
     engine.start();
