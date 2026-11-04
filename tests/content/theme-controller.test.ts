@@ -551,7 +551,7 @@ describe('ThemeController async reconciliation', () => {
         if (!paused) expect(official.applied).toBe(false);
         this.paused = paused;
       }
-      rescan(): void { this.rescans += 1; }
+      rescan = (): void => { this.rescans += 1; };
     }
     const official = new SettlingOfficial();
     const detector = new FakeDetector(...Array.from({length: 10}, () => result('light')));
