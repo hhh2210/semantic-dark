@@ -4,6 +4,7 @@ import {
   domOverrideCss,
   endDomStyleUpdate,
   needsTransitionGuard,
+  withPrepaintExempt,
 } from './dom-style-contract';
 import {DomStateObserver} from './dom-state-observer';
 import {mapElementStyles, restoreElementStyles} from './dom-style-mapper';
@@ -103,6 +104,7 @@ export class DomThemeEngine {
   private queue: Element[] = [];
   private queued = new WeakSet<Element>();
   private idleHandle: number | null = null;
+  private idleWaiters: Array<() => void> = [];
   private frameHandle: number | null = null;
   // Elements of recently changed subtrees, in tree order, mapped before paint.
   private urgent: Element[] = [];
@@ -138,6 +140,12 @@ export class DomThemeEngine {
     this.enqueue(document.documentElement);
   }
 
+  /** Resolves once every queued element is mapped, or at once if none is pending. */
+  whenIdle(): Promise<void> {
+    if (!this.enabled || this.idleHandle == null) return Promise.resolve();
+    return new Promise((resolve) => { this.idleWaiters.push(resolve); });
+  }
+
   stop(): void {
     this.enabled = false;
     this.mappingPaused = false;
@@ -158,6 +166,7 @@ export class DomThemeEngine {
     this.queued = new WeakSet<Element>();
     for (const element of this.touched) this.restoreElement(element);
     this.touched.clear();
+    this.resolveIdleWaiters();
   }
 
   // Keep existing paint while an official candidate temporarily changes source CSS.
@@ -291,10 +300,18 @@ export class DomThemeEngine {
       processed += batch.length;
     }
     if (this.queue.length > 0) this.idleHandle = scheduleIdle((next) => this.drain(next));
-    else this.pruneDetached();
+    else {
+      this.pruneDetached();
+      this.resolveIdleWaiters();
+    }
   }
 
-  // Removed content must not stay referenced (and restored on stop) forever.
+  private resolveIdleWaiters(): void {
+    const waiters = this.idleWaiters;
+    this.idleWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
+
   private pruneDetached(): void {
     for (const element of this.touched) {
       if (!element.isConnected) this.touched.delete(element);
@@ -308,7 +325,9 @@ export class DomThemeEngine {
   // Restores and remaps a tree-ordered batch within one task: authored sources
   // must be read without our override, but nothing is painted in between.
   // Restoring the whole batch first costs one style invalidation instead of one
-  // per element.
+  // per element. Restoring also clears the transition guard's marker, so it
+  // comes first. The rest of the batch cannot animate, so the pre-paint's
+  // exemption needs no guard of its own.
   private processBatch(elements: readonly Element[]): void {
     const batch: HTMLElement[] = [];
     for (const element of elements) {
@@ -318,13 +337,15 @@ export class DomThemeEngine {
       if (element instanceof HTMLElement) batch.push(element);
     }
     const guarded = batch.filter(needsTransitionGuard);
+    for (const element of batch) restoreElementStyles(element);
     for (const element of guarded) beginDomStyleUpdate(element);
     try {
-      for (const element of batch) restoreElementStyles(element);
-      for (const element of batch) {
-        if (mapElementStyles(element, this.config)) this.touched.add(element);
-        else this.touched.delete(element);
-      }
+      withPrepaintExempt(batch, () => {
+        for (const element of batch) {
+          if (mapElementStyles(element, this.config)) this.touched.add(element);
+          else this.touched.delete(element);
+        }
+      });
     } finally {
       for (const element of guarded) endDomStyleUpdate(element);
     }

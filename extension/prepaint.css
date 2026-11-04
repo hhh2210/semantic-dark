@@ -1,6 +1,17 @@
-:root[data-semantic-dark-active] {
+:root[data-semantic-dark-active],
+:root[data-semantic-dark-prepaint] {
   color-scheme: dark !important;
   background-color: #111416 !important;
+}
+
+/* Until the transform maps a surface, or the probe leaves the page alone, no
+   authored background paints over the dark base. :where() keeps this below the
+   mapped-surface rules, and an element being mapped reads its own background. */
+:root[data-semantic-dark-prepaint] :where(
+  body:not([data-semantic-dark-updating]),
+  body :not([data-semantic-dark-updating])
+) {
+  background-color: transparent !important;
 }
 
 :root[data-semantic-dark-probing],
@@ -12,6 +23,9 @@
 
 :root[data-semantic-dark-active] img,
 :root[data-semantic-dark-active] video,
-:root[data-semantic-dark-active] canvas {
+:root[data-semantic-dark-active] canvas,
+:root[data-semantic-dark-prepaint] img,
+:root[data-semantic-dark-prepaint] video,
+:root[data-semantic-dark-prepaint] canvas {
   color-scheme: normal;
 }

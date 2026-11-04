@@ -10,14 +10,21 @@ import {
   beginDocumentTransitionGuard,
   endDocumentTransitionGuard,
   flushDocumentStyle,
+  withPrepaintLifted,
 } from './dom-style-contract';
 import {OfficialThemeLane, officialThemeLooksApplied, type OfficialThemeLaneLike} from './official-theme';
 import {officialThemeCandidates, officialThemeRecipeKeys} from './official-theme-recipes';
+import {PREPAINT_ATTRIBUTE} from './prepaint';
 const MAX_OFFICIAL_ATTEMPTS = 2;
+// Bounds how long the pre-paint can outlive activation if mapping never drains.
+const PREPAINT_RELEASE_TIMEOUT_MS = 3000;
+// Painted frames on which a natively dark page may release the pre-paint early.
+const EARLY_DARK_FRAMES = 3;
 
 export interface ThemeEngineLike {
   update(config: ThemeConfig): void;
   rescan?(): void;
+  whenIdle?(): Promise<void>;
   setMappingPaused?(paused: boolean): void;
 }
 
@@ -33,6 +40,14 @@ export interface ThemeControllerOptions {
   debounceMs?: number;
   onStatus?: (status: PageThemeStatus) => void;
   officialTheme?: OfficialThemeLaneLike;
+  /**
+   * Paint a dark base from start until the first decision, so a new document
+   * does not show its light authored frames while its theme is being probed.
+   * A base already painted at document_start is adopted either way.
+   */
+  prepaint?: boolean;
+  prepaintTimeout?: () => Promise<void>;
+  frame?: (callback: () => void) => void;
 }
 
 export class ThemeController {
@@ -41,7 +56,12 @@ export class ThemeController {
   private readonly stableDelay: () => Promise<void>;
   private readonly debounceMs: number;
   private readonly onStatus: ((status: PageThemeStatus) => void) | undefined;
+  private readonly prepaintRequested: boolean;
+  private readonly prepaintTimeout: () => Promise<void>;
+  private readonly frame: (callback: () => void) => void;
   private active = false;
+  private prepainted = false;
+  private prepaintRelease = 0;
   private started = false;
   private detectorRunning = false;
   private generation = 0;
@@ -66,6 +86,9 @@ export class ThemeController {
     this.debounceMs = options.debounceMs ?? 100;
     this.onStatus = options.onStatus;
     this.officialTheme = options.officialTheme ?? new OfficialThemeLane();
+    this.prepaintRequested = options.prepaint ?? false;
+    this.prepaintTimeout = options.prepaintTimeout ?? (() => delay(PREPAINT_RELEASE_TIMEOUT_MS));
+    this.frame = options.frame ?? ((callback) => { void nextFrame().then(callback); });
     this.status = {
       mode: this.config.mode,
       effectiveEnabled: false,
@@ -77,6 +100,11 @@ export class ThemeController {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+    // Every decision path below can then remove a base painted at document_start.
+    this.prepainted = document.documentElement.hasAttribute(PREPAINT_ATTRIBUTE);
+    if (!this.prepainted && this.prepaintRequested && (this.config.mode === 'on' ||
+      (this.config.mode === 'auto' && this.detector.prefersDark()))) this.applyPrepaint();
+    if (this.prepainted && this.config.mode === 'auto') this.releasePrepaintIfAuthoredDark(EARLY_DARK_FRAMES);
     await this.reconcile(true);
   }
 
@@ -103,11 +131,11 @@ export class ThemeController {
   }
 
   rescan(): void {
-    // A pending official candidate would be sampled into the mapping; its
-    // rollback rescans the restored page instead.
     if (!this.active || this.pendingOfficialGeneration !== null) return;
-    this.engines.dom.rescan?.();
-    this.engines.svg.rescan?.();
+    withPrepaintLifted(() => {
+      this.engines.dom.rescan?.();
+      this.engines.svg.rescan?.();
+    });
   }
 
   stop(): void {
@@ -115,6 +143,7 @@ export class ThemeController {
     this.cancelPendingProbe();
     this.stopDetector();
     this.deactivate();
+    this.releasePrepaint();
     this.releaseOfficialTheme();
     this.officialFailures = 0;
     this.officialRecipeKeys = [];
@@ -125,6 +154,7 @@ export class ThemeController {
     if (this.config.mode === 'off') {
       this.stopDetector();
       this.deactivate();
+      this.releasePrepaint();
       this.releaseOfficialTheme();
       this.setStatus('user-off', 'disabled-by-user');
       return;
@@ -132,15 +162,16 @@ export class ThemeController {
     if (this.config.mode === 'on') {
       this.stopDetector();
       this.releaseOfficialTheme();
-      if (this.active) this.applyToEngines(true);
+      if (this.active) withPrepaintLifted(() => this.applyToEngines(true));
       this.activate();
+      this.releasePrepaintOnceMapped();
       this.setStatus('user-on', 'forced-on-by-user');
       return;
     }
 
     this.startDetector();
     if (this.pauseForSystemLight()) return;
-    if (this.active) this.applyToEngines(true);
+    if (this.active) withPrepaintLifted(() => this.applyToEngines(true));
     if (modeChanged || this.status.decision === 'pending' || this.status.decision === 'system-light') {
       await this.probe();
     }
@@ -185,6 +216,7 @@ export class ThemeController {
     if (this.detector.prefersDark()) return false;
     this.cancelPendingProbe();
     this.deactivate();
+    this.releasePrepaint();
     this.releaseOfficialTheme();
     this.setStatus('system-light', 'system-prefers-light');
     return true;
@@ -219,6 +251,7 @@ export class ThemeController {
       if (this.isCurrentProbe(generation)) {
         this.releaseOfficialTheme();
         this.deactivate();
+        this.releasePrepaint();
         this.setStatus('ambiguous', 'source-theme-probe-failed');
       }
     } finally {
@@ -237,10 +270,12 @@ export class ThemeController {
     if (result.kind === 'light') {
       this.releaseOfficialTheme();
       this.activate();
+      this.releasePrepaintOnceMapped();
       this.setStatus('applied-light', result.reason);
       return;
     }
     this.deactivate();
+    this.releasePrepaint();
     if (result.kind === 'native-dark') {
       this.setStatus(this.officialTheme.isApplied() ? 'official-dark' : 'native-dark',
         this.officialTheme.isApplied() ? 'official-theme-activated' : result.reason);
@@ -287,6 +322,7 @@ export class ThemeController {
         this.deactivate();
         this.officialFailures = 0;
         this.setPendingOfficialGeneration(null);
+        this.releasePrepaint();
         this.setStatus('official-dark', 'official-theme-activated');
         return 'applied';
       }
@@ -336,10 +372,13 @@ export class ThemeController {
     beginDocumentTransitionGuard(root);
     try {
       root.setAttribute(ACTIVE_ATTRIBUTE, '');
+      // Engines read authored colors (e.g. an SVG's backdrop), not the pre-paint.
+      if (this.prepainted) root.removeAttribute(PREPAINT_ATTRIBUTE);
       flushDocumentStyle(root);
       this.active = true;
       this.applyToEngines(true);
     } finally {
+      if (this.prepainted) root.setAttribute(PREPAINT_ATTRIBUTE, '');
       endDocumentTransitionGuard(root);
     }
   }
@@ -359,6 +398,60 @@ export class ThemeController {
     } finally {
       endDocumentTransitionGuard(root);
     }
+  }
+
+  private applyPrepaint(): void {
+    const root = document.documentElement;
+    beginDocumentTransitionGuard(root);
+    try {
+      root.setAttribute(PREPAINT_ATTRIBUTE, '');
+      this.prepainted = true;
+    } finally {
+      endDocumentTransitionGuard(root);
+    }
+  }
+
+  private releasePrepaint(): void {
+    this.prepaintRelease += 1;
+    if (!this.prepainted) return;
+    const root = document.documentElement;
+    beginDocumentTransitionGuard(root);
+    try {
+      root.removeAttribute(PREPAINT_ATTRIBUTE);
+      this.prepainted = false;
+    } finally {
+      endDocumentTransitionGuard(root);
+    }
+  }
+
+  // The base hides unmapped light surfaces, so keep it until the first mapping
+  // pass drains; removing it at activation would paint them for that pass.
+  private releasePrepaintOnceMapped(): void {
+    if (!this.prepainted) return;
+    const release = ++this.prepaintRelease;
+    const mapped = this.engines.dom.whenIdle?.() ?? Promise.resolve();
+    void Promise.race([mapped, this.prepaintTimeout()]).then(() => {
+      if (release === this.prepaintRelease) this.releasePrepaint();
+    });
+  }
+
+  // A natively dark page usually reads dark from its first frame. Releasing
+  // there keeps its own surfaces instead of the flattened base until the full
+  // probe settles; a wrong call only falls back to the unpainted behavior.
+  private releasePrepaintIfAuthoredDark(frames: number): void {
+    this.frame(() => {
+      // Every decision either releases the base or activates; a pending
+      // official candidate would read as dark before it is confirmed.
+      if (!this.prepainted || this.active || this.officialTheme.isApplied()) return;
+      if (document.body) {
+        if (this.sampleAuthoredTheme().kind === 'native-dark') {
+          this.releasePrepaint();
+          return;
+        }
+        frames -= 1;
+      }
+      if (frames > 0) this.releasePrepaintIfAuthoredDark(frames);
+    });
   }
 
   private applyToEngines(enabled: boolean): void {
@@ -387,11 +480,13 @@ export class ThemeController {
 
     beginDocumentTransitionGuard(root);
     if (this.active) root.removeAttribute(ACTIVE_ATTRIBUTE);
+    if (this.prepainted) root.removeAttribute(PREPAINT_ATTRIBUTE);
     flushDocumentStyle(root);
     try {
       return this.detector.sample();
     } finally {
       if (this.active) root.setAttribute(ACTIVE_ATTRIBUTE, '');
+      if (this.prepainted) root.setAttribute(PREPAINT_ATTRIBUTE, '');
       endDocumentTransitionGuard(root);
     }
   }

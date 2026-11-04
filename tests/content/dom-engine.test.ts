@@ -1,6 +1,8 @@
+import {readFileSync} from 'node:fs';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {DomThemeEngine} from '../../src/content/dom-engine';
 import {DOM_ATTRIBUTE, domOverrideCss} from '../../src/content/dom-style-contract';
+import {PREPAINT_ATTRIBUTE} from '../../src/content/prepaint';
 import {DEFAULT_THEME} from '../../src/types';
 
 const running: DomThemeEngine[] = [];
@@ -15,6 +17,7 @@ afterEach(() => {
   running.length = 0;
   document.documentElement.innerHTML = '<head></head><body></body>';
   document.documentElement.removeAttribute('data-semantic-dark-active');
+  document.documentElement.removeAttribute(PREPAINT_ATTRIBUTE);
 });
 
 describe('DomThemeEngine', () => {
@@ -30,6 +33,32 @@ describe('DomThemeEngine', () => {
       `:root[data-semantic-dark-active] [${DOM_ATTRIBUTE.afterBackground}]::after`,
     );
   });
+  it('reports idle only once every queued element has been mapped', async () => {
+    document.body.innerHTML = '<main style="background:#fff;color:#111">Text</main>';
+    const main = document.querySelector<HTMLElement>('main')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+
+    engine.start();
+    let mapped: boolean | null = null;
+    const idle = engine.whenIdle().then(() => {
+      mapped = main.hasAttribute('data-semantic-dark-background');
+    });
+    expect(mapped).toBe(null);
+    await idle;
+    expect(mapped).toBe(true);
+    await expect(engine.whenIdle()).resolves.toBeUndefined();
+  });
+
+  it('releases idle waiters when it stops before draining', async () => {
+    document.body.innerHTML = '<main style="background:#fff">Text</main>';
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    engine.start();
+    const idle = engine.whenIdle();
+    engine.stop();
+    await expect(idle).resolves.toBeUndefined();
+  });
+
   it('registers host variables as non-inherited only in the document sheet', () => {
     const documentCss = domOverrideCss(true);
     expect(documentCss).toContain('@property --semantic-dark-background { syntax: \'*\'; inherits: false; }');
@@ -37,6 +66,37 @@ describe('DomThemeEngine', () => {
     // Generated content inherits its variables from the originating element.
     expect(documentCss).not.toContain('@property --semantic-dark-before-background');
     expect(domOverrideCss(false)).not.toContain('@property');
+  });
+
+  it('reads authored backgrounds that the pre-paint keeps transparent', async () => {
+    const sheet = document.createElement('style');
+    sheet.textContent = `${readFileSync('extension/prepaint.css', 'utf8')}
+      body { background-color: rgb(252, 252, 252); }
+      .panel { background-color: #fff; }`;
+    document.head.append(sheet);
+    document.body.innerHTML = '<p>Text</p>';
+    document.documentElement.setAttribute('data-semantic-dark-active', '');
+    document.documentElement.setAttribute(PREPAINT_ATTRIBUTE, '');
+    expect(getComputedStyle(document.body).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+
+    engine.start();
+    await engine.whenIdle();
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.textContent = 'Inserted';
+    document.body.append(panel);
+    await Promise.resolve();
+    await engine.whenIdle();
+
+    for (const surface of [document.body, panel]) {
+      expect(surface.hasAttribute(DOM_ATTRIBUTE.background)).toBe(true);
+      // The exemption from the pre-paint lasts only for the read.
+      expect(surface.hasAttribute(DOM_ATTRIBUTE.updating)).toBe(false);
+    }
+    // Releasing the pre-paint is the controller's call, once mapping is idle.
+    expect(document.documentElement.hasAttribute(PREPAINT_ATTRIBUTE)).toBe(true);
   });
 
   it('maps authored backgrounds, text, and borders through role variables', async () => {
@@ -131,6 +191,8 @@ describe('DomThemeEngine', () => {
   });
 
   it('remaps a class-changed element before the next paint', async () => {
+    // Unit scheduling is deterministic; real frame budgets are exercised in E2E.
+    vi.spyOn(performance, 'now').mockReturnValue(0);
     document.head.innerHTML = '<style>.card{background:#fff;color:#222}.card.selected{background:#ddf4ff}</style>';
     document.body.innerHTML = '<article id="card" class="card">Card</article>';
     const card = document.querySelector<HTMLElement>('#card')!;
@@ -170,6 +232,8 @@ describe('DomThemeEngine', () => {
   });
 
   it('maps an inserted host and its open shadow content before the next paint', async () => {
+    // Unit scheduling is deterministic; real frame budgets are exercised in E2E.
+    vi.spyOn(performance, 'now').mockReturnValue(0);
     const engine = new DomThemeEngine(DEFAULT_THEME);
     running.push(engine);
     engine.start();

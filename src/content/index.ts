@@ -1,14 +1,17 @@
 import {DomThemeEngine} from './dom-engine';
 import {ImageThemeEngine} from './image-engine';
 import {NativeDarkDetector} from './native-dark';
+import {claimDarkBase} from './prepaint';
 import {SvgThemeEngine} from './svg-engine';
 import {ThemeController} from './theme-controller';
 import {observeInsecureMedia} from './upgrade-insecure';
 import {
+  configStorageKey,
   normalizeThemeConfig,
   type NormalizedThemeConfig,
   type PageThemeStatus,
   type RuntimeMessage,
+  type ThemeConfig,
 } from '../types';
 
 // Xiaohongshu and similar sites still author `http:` CDN media on HTTPS pages.
@@ -20,10 +23,13 @@ observeInsecureMedia(document);
 const host = location.host;
 let controller: ThemeController | null = null;
 
+// Read storage directly: the pre-paint waits for this, and waking the service
+// worker for a message round trip can take longer than the first paint.
 async function loadConfig(): Promise<NormalizedThemeConfig> {
   try {
-    const message: RuntimeMessage = {type: 'semantic-dark:get-config', host};
-    return normalizeThemeConfig(await chrome.runtime.sendMessage(message));
+    const key = configStorageKey(host);
+    const record = await chrome.storage.local.get(key);
+    return normalizeThemeConfig(record[key] as Partial<ThemeConfig> | undefined);
   } catch {
     return normalizeThemeConfig();
   }
@@ -34,7 +40,11 @@ void loadConfig().then((config) => {
   const dom = new DomThemeEngine(dormant);
   const svg = new SvgThemeEngine(dormant);
   const image = new ImageThemeEngine(dormant);
-  controller = new ThemeController(config, new NativeDarkDetector(), {dom, svg, image});
+  controller = new ThemeController(config, new NativeDarkDetector(), {dom, svg, image}, {
+    // A frame may be a transparent embed; only a top-level page owns its canvas.
+    prepaint: window === window.top,
+  });
+  claimDarkBase();
   void controller.start();
 });
 

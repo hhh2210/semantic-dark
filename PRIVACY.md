@@ -37,7 +37,10 @@ preferences for that host.
 
 The HTTP/HTTPS host permission is required because content scripts must inspect
 and restyle the pages the user visits. The `storage` permission is required for
-the per-host settings above. Semantic Dark does not request browsing-history,
+the per-host settings above. The `scripting` permission registers one of the
+extension's own packaged scripts to run when a page starts loading, so the page
+is dark before its first frame; hosts set to forced-off are excluded from that
+registration, which stays in the browser. Semantic Dark does not request browsing-history,
 cookies, identity, clipboard, downloads, or remote-code permissions.
 
 The repository's optional `ml/` development tools can download explicitly
