@@ -11,6 +11,11 @@ relationships, raster diagrams, and ordinary images take separate paths.
 - Generated `::before`/`::after` surfaces, gradients, text, and borders use the
   same semantic mapping. Common path-local pointer and keyboard-focus state
   changes are re-sampled before their first rendered frame.
+- Dynamic pages stay dark across interactions. Class changes and inserted
+  content are remapped before the next paint (a 16 ms budget within a second of
+  user input, 8 ms for ambient mutations; the rest continues at idle time), and
+  CSSOM or palette changes remap each element in place instead of first
+  restoring its authored light colors.
 - CSS gradients keep their geometry and transparent gutters while solid color
   stops are remapped. Text contrast is checked against the brightest resulting
   stop, covering table headers and callouts that use light gradient bands.

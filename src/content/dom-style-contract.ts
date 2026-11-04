@@ -40,6 +40,18 @@ export const DOM_VARIABLE = {
   afterBorderBottom: '--semantic-dark-after-border-bottom',
   afterBorderLeft: '--semantic-dark-after-border-left',
 } as const;
+const HOST_VARIABLES = [
+  DOM_VARIABLE.color,
+  DOM_VARIABLE.background,
+  DOM_VARIABLE.backgroundImage,
+  DOM_VARIABLE.borderTop,
+  DOM_VARIABLE.borderRight,
+  DOM_VARIABLE.borderBottom,
+  DOM_VARIABLE.borderLeft,
+  DOM_VARIABLE.decoration,
+  DOM_VARIABLE.caret,
+] as const;
+
 export const DOCUMENT_PROBE_ATTRIBUTE = 'data-semantic-dark-probing';
 
 export function domOverrideCss(documentScoped: boolean): string {
@@ -81,7 +93,12 @@ ${selector(attributes.border, suffix)} {
   const selection = documentScoped
     ? ':root[data-semantic-dark-active]::selection, :root[data-semantic-dark-active] ::selection'
     : '::selection';
-  return `
+  // Host variables are only read by the element that owns them. Registering them
+  // as non-inherited keeps a parent write from restyling its whole subtree.
+  // Pseudo-element variables must keep inheriting into ::before/::after.
+  const registrations = documentScoped ? HOST_VARIABLES.map((name) =>
+    `@property ${name} { syntax: '*'; inherits: false; }`).join('\n') : '';
+  return `${registrations}
 ${selector(attribute.updating)},
 ${selector(attribute.updating, '::before')},
 ${selector(attribute.updating, '::after')} { transition: none !important; }
@@ -130,6 +147,18 @@ ${selection} { background: #31536b !important; color: #f5f8fa !important; }
 `;
 }
 
+function animatesChanges(style: CSSStyleDeclaration): boolean {
+  return style.transitionDuration.split(',').some((value) => Number.parseFloat(value) > 0);
+}
+
+// The transition guard costs two forced style recalcs. Only elements whose box
+// or generated content can actually animate a color change need it.
+export function needsTransitionGuard(element: HTMLElement): boolean {
+  return animatesChanges(getComputedStyle(element)) ||
+    animatesChanges(getComputedStyle(element, '::before')) ||
+    animatesChanges(getComputedStyle(element, '::after'));
+}
+
 export function beginDomStyleUpdate(element: HTMLElement): void {
   element.setAttribute(DOM_ATTRIBUTE.updating, '');
   void getComputedStyle(element).transitionDuration;
@@ -148,6 +177,24 @@ export function beginDocumentTransitionGuard(root: HTMLElement): void {
 export function endDocumentTransitionGuard(root: HTMLElement): void {
   flushDocumentStyle(root);
   root.removeAttribute(DOCUMENT_PROBE_ATTRIBUTE);
+}
+
+export const ACTIVE_ATTRIBUTE = 'data-semantic-dark-active';
+
+// Runs `read` against the authored document styles: document-scoped overrides
+// are hidden and restored within one task, so nothing is painted in between.
+export function withDocumentOverridesHidden<T>(read: () => T): T {
+  const root = document.documentElement;
+  if (!root.hasAttribute(ACTIVE_ATTRIBUTE)) return read();
+  beginDocumentTransitionGuard(root);
+  root.removeAttribute(ACTIVE_ATTRIBUTE);
+  flushDocumentStyle(root);
+  try {
+    return read();
+  } finally {
+    root.setAttribute(ACTIVE_ATTRIBUTE, '');
+    endDocumentTransitionGuard(root);
+  }
 }
 
 export function flushDocumentStyle(root: HTMLElement): void {

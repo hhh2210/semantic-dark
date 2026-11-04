@@ -1,4 +1,4 @@
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {DomThemeEngine} from '../../src/content/dom-engine';
 import {DOM_ATTRIBUTE, domOverrideCss} from '../../src/content/dom-style-contract';
 import {DEFAULT_THEME} from '../../src/types';
@@ -10,6 +10,7 @@ function nextTask(): Promise<void> {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const engine of running) engine.stop();
   running.length = 0;
   document.documentElement.innerHTML = '<head></head><body></body>';
@@ -53,6 +54,15 @@ describe('DomThemeEngine', () => {
     const idle = engine.whenIdle();
     engine.stop();
     await expect(idle).resolves.toBeUndefined();
+  });
+
+  it('registers host variables as non-inherited only in the document sheet', () => {
+    const documentCss = domOverrideCss(true);
+    expect(documentCss).toContain('@property --semantic-dark-background { syntax: \'*\'; inherits: false; }');
+    expect(documentCss).toContain('@property --semantic-dark-color { syntax: \'*\'; inherits: false; }');
+    // Generated content inherits its variables from the originating element.
+    expect(documentCss).not.toContain('@property --semantic-dark-before-background');
+    expect(domOverrideCss(false)).not.toContain('@property');
   });
 
   it('maps authored backgrounds, text, and borders through role variables', async () => {
@@ -126,6 +136,229 @@ describe('DomThemeEngine', () => {
     expect(shadow.querySelector('style[data-semantic-dark-sheet]')).not.toBeNull();
     expect(surface.hasAttribute('data-semantic-dark-background')).toBe(true);
     expect(surface.hasAttribute('data-semantic-dark-color')).toBe(true);
+  });
+
+  it('keeps existing mappings painted while a rescan remaps them', async () => {
+    document.body.innerHTML = '<article id="card" style="background:#fff;color:#222">Card</article>';
+    const card = document.querySelector<HTMLElement>('#card')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await nextTask();
+    const mapped = card.style.getPropertyValue('--semantic-dark-background');
+
+    engine.rescan();
+
+    // A CSSOM change must not expose the authored light surface until idle time.
+    expect(card.hasAttribute('data-semantic-dark-background')).toBe(true);
+    expect(card.style.getPropertyValue('--semantic-dark-background')).toBe(mapped);
+    await nextTask();
+    expect(card.style.getPropertyValue('--semantic-dark-background')).toBe(mapped);
+  });
+
+  it('remaps a class-changed element before the next paint', async () => {
+    document.head.innerHTML = '<style>.card{background:#fff;color:#222}.card.selected{background:#ddf4ff}</style>';
+    document.body.innerHTML = '<article id="card" class="card">Card</article>';
+    const card = document.querySelector<HTMLElement>('#card')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await nextTask();
+    const before = card.style.getPropertyValue('--semantic-dark-background');
+
+    card.classList.add('selected');
+    await Promise.resolve();
+
+    // The mutation callback runs before rendering; the new state is already mapped.
+    expect(card.hasAttribute('data-semantic-dark-background')).toBe(true);
+    expect(card.style.getPropertyValue('--semantic-dark-background')).toMatch(/^rgb/);
+    expect(card.style.getPropertyValue('--semantic-dark-background')).not.toBe(before);
+  });
+
+  it('maps inserted content before the next paint', async () => {
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await nextTask();
+
+    // This unit checks mutation ordering. Real frame budgets are checked by E2E.
+    vi.spyOn(performance, 'now').mockReturnValue(0);
+    const panel = document.createElement('section');
+    panel.innerHTML = '<div id="item" style="background:#f6f8fa;color:#111">Inserted</div>';
+    panel.style.background = '#fff';
+    document.body.append(panel);
+    await Promise.resolve();
+
+    const item = panel.querySelector<HTMLElement>('#item')!;
+    expect(panel.hasAttribute('data-semantic-dark-background')).toBe(true);
+    expect(item.hasAttribute('data-semantic-dark-background')).toBe(true);
+    expect(item.hasAttribute('data-semantic-dark-color')).toBe(true);
+  });
+
+  it('maps an inserted host and its open shadow content before the next paint', async () => {
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await nextTask();
+
+    const host = document.createElement('section');
+    const shadow = host.attachShadow({mode: 'open'});
+    shadow.innerHTML = '<div id="surface" style="background:#fff;color:#111">shadow</div>';
+    document.body.append(host);
+    await Promise.resolve();
+
+    const surface = shadow.querySelector<HTMLElement>('#surface')!;
+    expect(surface.hasAttribute('data-semantic-dark-background')).toBe(true);
+    expect(surface.hasAttribute('data-semantic-dark-color')).toBe(true);
+  });
+
+  it('keeps a large mapped container on its previous mapping until idle time', async () => {
+    document.head.innerHTML = '<style>#app{background:#fff;color:#222}#app.modal-open{background:#2f6feb}</style>';
+    document.body.innerHTML = `<div id="app">${'<p>row</p>'.repeat(600)}</div>`;
+    const app = document.querySelector<HTMLElement>('#app')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const before = app.style.getPropertyValue('--semantic-dark-background');
+    expect(before).toMatch(/^rgb/);
+
+    app.classList.add('modal-open');
+    await Promise.resolve();
+
+    // Remapping it synchronously would restyle all 600 descendants before paint.
+    expect(app.hasAttribute('data-semantic-dark-background')).toBe(true);
+    expect(app.style.getPropertyValue('--semantic-dark-background')).toBe(before);
+    for (let attempt = 0; attempt < 60 &&
+      app.style.getPropertyValue('--semantic-dark-background') === before; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(app.style.getPropertyValue('--semantic-dark-background')).not.toBe(before);
+  }, 15_000);
+
+  it('defers descendants with their large parent, then maps them against its new background', async () => {
+    document.head.innerHTML = '<style>#app{background:#fff}#app.changed{background:#3478aa}#child{color:#777}</style>';
+    document.body.innerHTML = `<div id="app"><p id="child">Child</p>${'<div></div>'.repeat(520)}</div>`;
+    const app = document.querySelector<HTMLElement>('#app')!;
+    const child = document.querySelector<HTMLElement>('#child')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const before = child.style.getPropertyValue('--semantic-dark-color');
+    const idle: Array<(deadline: {didTimeout: boolean; timeRemaining(): number}) => void> = [];
+    vi.stubGlobal('requestIdleCallback', (callback: typeof idle[number]) => { idle.push(callback); return 1; });
+    try {
+      app.classList.add('changed');
+      await Promise.resolve();
+      expect(child.style.getPropertyValue('--semantic-dark-color')).toBe(before);
+      const queued = (engine as unknown as {queued: WeakSet<Element>}).queued;
+      expect(queued.has(app)).toBe(true);
+      expect(queued.has(child)).toBe(true);
+      while (idle.length) idle.shift()!({didTimeout: true, timeRemaining: () => 100});
+      const {mapColor} = await import('../../src/color');
+      expect(child.style.getPropertyValue('--semantic-dark-color')).toBe(mapColor('#777', {
+        role: 'text', background: app.style.getPropertyValue('--semantic-dark-background'),
+        minContrast: DEFAULT_THEME.minimumTextContrast, preserveHue: true,
+      }));
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('keeps observers, state events and idle rescans from mapping a temporary official candidate', async () => {
+    document.head.innerHTML = '<style>#card{background:#fff;color:#222}.candidate #card{background:#234;color:#fff}</style>';
+    document.body.innerHTML = '<article id="card">Original</article>';
+    const card = document.querySelector<HTMLElement>('#card')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await nextTask();
+    const shadow = card.attachShadow({mode: 'open'});
+    shadow.innerHTML = '<p style="color:#333">Shadow</p>';
+    engine.rescan();
+    await nextTask();
+    const before = card.style.cssText;
+    engine.setMappingPaused(true);
+    document.body.classList.add('candidate');
+    card.insertAdjacentHTML('beforeend', '<p id="new" style="background:#eee;color:#555">New</p>');
+    shadow.innerHTML = '<p id="shadow-new" style="color:#555">Changed shadow</p>';
+    engine.rescan();
+    card.dispatchEvent(new Event('focusin', {bubbles: true}));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(card.style.cssText).toBe(before);
+    expect(document.querySelector('#new')!.hasAttribute('data-semantic-dark-color')).toBe(false);
+    document.body.classList.remove('candidate');
+    engine.setMappingPaused(false);
+    await nextTask();
+    expect(card.style.cssText).toBe(before);
+    expect(document.querySelector('#new')!.hasAttribute('data-semantic-dark-color')).toBe(true);
+    expect(shadow.querySelector('#shadow-new')!.hasAttribute('data-semantic-dark-color')).toBe(true);
+  });
+
+  it('finishes before-paint mapping across frames even when every frame runs out of budget', async () => {
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await nextTask();
+    const realNow = performance.now.bind(performance);
+    let skew = 0;
+    // Each clock read costs 5ms, so every drain exhausts its budget almost at once.
+    performance.now = () => realNow() + (skew += 5);
+    try {
+      const outer = document.createElement('section');
+      outer.innerHTML = Array.from({length: 30}, (_, index) =>
+        `<div class="row" style="background:#fff;color:#111">Row ${index}</div>`).join('');
+      document.body.append(outer);
+      outer.classList.add('open');
+      outer.firstElementChild!.classList.add('selected');
+      for (let frame = 0; frame < 200; frame += 1) {
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+        const state = engine as unknown as {urgent: Element[]; frameHandle: number | null};
+        if (state.urgent.length === 0 && state.frameHandle === null) break;
+      }
+    } finally {
+      performance.now = realNow;
+    }
+    const state = engine as unknown as {urgent: Element[]; frameHandle: number | null};
+    expect(state.urgent).toEqual([]);
+    expect(state.frameHandle).toBeNull();
+    for (const row of document.querySelectorAll('.row')) {
+      expect(row.hasAttribute('data-semantic-dark-background')).toBe(true);
+    }
+  });
+
+  it('releases removed elements on rescan', async () => {
+    document.body.innerHTML = '<p id="gone" style="color:#222">Removed</p>';
+    const gone = document.querySelector<HTMLElement>('#gone')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await nextTask();
+    const state = engine as unknown as {touched: Set<HTMLElement>};
+    expect(state.touched.has(gone)).toBe(true);
+
+    gone.remove();
+    engine.rescan();
+
+    expect(state.touched.has(gone)).toBe(false);
+  });
+
+  it('restores elements that were remapped after a mutation when disabled', async () => {
+    document.head.innerHTML = '<style>.card{background:#fff;color:#222}.card.selected{background:#ddf4ff}</style>';
+    document.body.innerHTML = '<article id="card" class="card">Card</article>';
+    const card = document.querySelector<HTMLElement>('#card')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await nextTask();
+    card.classList.add('selected');
+    await Promise.resolve();
+    engine.rescan();
+    await nextTask();
+
+    engine.update({...DEFAULT_THEME, enabled: false});
+
+    expect(card.hasAttribute('data-semantic-dark-background')).toBe(false);
+    expect(card.style.getPropertyValue('--semantic-dark-background')).toBe('');
   });
 
   it('jointly maps gradient-backed labels and their text for readability', async () => {
