@@ -30,7 +30,7 @@ export interface AssetDecisionProvider {
 
 /** Existing heuristic eligibility, kept outside model control. Not a calibrated safety claim. */
 export function allowedAssetActions(value: VisualResourceClassification): readonly AssetAction[] {
-  if (!Number.isFinite(value.confidence) || value.confidence < 0.58 || value.kind === 'unknown') return ['keep'];
+  if (!Number.isFinite(value.confidence) || !Number.isFinite(value.features.transparentRatio) || value.confidence < 0.58 || value.kind === 'unknown') return ['keep'];
   const backing: AssetAction[] = value.features.transparentRatio > 0.01 ? ['backplate'] : [];
   if (value.kind === 'diagram') return ['keep', 'dim', 'diagram', ...backing];
   if (value.kind === 'icon' && value.policy === 'recolor') return ['keep', 'dim', 'monochrome', ...backing];
@@ -56,6 +56,9 @@ export async function decideAsset(
   const contrast = logoActionContrast(observation);
   if (contrast && contrast.keep < 3 && contrast.backplate >= 3) {
     return {action: 'backplate', authority: 'constraint', reason: 'transparent-logo-contrast'};
+  }
+  if (contrast && contrast.keep >= 3 && observation.classification.policy === 'recolor') {
+    return {action: 'keep', authority: 'constraint', reason: 'logo-already-readable'};
   }
   if (!provider) return heuristicAssetDecision(observation.classification);
   const allowed = Object.freeze([...allowedAssetActions(observation.classification)]);

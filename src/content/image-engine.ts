@@ -20,11 +20,14 @@ const RASTER_MAIN_TIME_ATTRIBUTE = 'data-semantic-dark-raster-main-ms';
 const RASTER_DISPATCH_TIME_ATTRIBUTE = 'data-semantic-dark-raster-dispatch-ms';
 const RASTER_WORKER_TIME_ATTRIBUTE = 'data-semantic-dark-raster-worker-ms';
 const RASTER_WORKER_ATTRIBUTE = 'data-semantic-dark-raster-worker';
+const READ_ATTRIBUTE = 'data-semantic-dark-image-reading';
+const GUARD_ATTRIBUTE = 'data-semantic-dark-image-guard';
 const STYLE_ID = 'semantic-dark-image-sheet';
 const IMAGE_STYLE = `
-img[${FILTER_ATTRIBUTE}="dim"] { filter: brightness(.82) contrast(1.04) !important; }
-img[${FILTER_ATTRIBUTE}="recolor"] { filter: brightness(0) invert(.92) !important; }
-:root[data-semantic-dark-active] img[${FILTER_ATTRIBUTE}="backplate"]:not([data-semantic-dark-updating]) { background-color: white !important; }
+img[${GUARD_ATTRIBUTE}] { transition: none !important; }
+img[${FILTER_ATTRIBUTE}="dim"]:not([${READ_ATTRIBUTE}]) { filter: brightness(.82) contrast(1.04) !important; }
+img[${FILTER_ATTRIBUTE}="recolor"]:not([${READ_ATTRIBUTE}]) { filter: brightness(0) invert(.92) !important; }
+:root[data-semantic-dark-active] img[${FILTER_ATTRIBUTE}="backplate"]:not([data-semantic-dark-updating]):not([${READ_ATTRIBUTE}]) { background-color: white !important; }
 `;
 
 function ensureStyle(): void {
@@ -49,6 +52,9 @@ export class ImageThemeEngine {
   private readonly rasterWorker = new RasterWorkerClient();
   private rasterAbort = new AbortController();
   private generation = 0;
+  private readonly contexts = new Map<HTMLImageElement, string>();
+  private watchedAncestors = new WeakSet<Element>();
+  private contextRefresh: ReturnType<typeof setTimeout> | null = null;
   private mappingPaused = false;
   private readonly pendingImages = new Set<HTMLImageElement>();
   private readonly retryTimers = new Map<HTMLImageElement, ReturnType<typeof setTimeout>>();
@@ -75,6 +81,7 @@ export class ImageThemeEngine {
     }
     this.scan(document);
     this.mutations = new MutationObserver((records) => {
+      if (records.length) this.scheduleContextRefresh();
       for (const record of records) {
         for (const node of record.addedNodes) {
           if (node instanceof HTMLImageElement) this.queue(node);
@@ -101,6 +108,7 @@ export class ImageThemeEngine {
   setMappingPaused(paused: boolean): void {
     this.mappingPaused = paused;
     if (!paused && this.config.enabled) {
+      this.scheduleContextRefresh();
       const pending = [...this.pendingImages];
       this.pendingImages.clear();
       for (const image of pending) {
@@ -115,6 +123,10 @@ export class ImageThemeEngine {
     this.generation += 1;
     this.mappingPaused = false;
     this.pendingImages.clear();
+    this.contexts.clear();
+    this.watchedAncestors = new WeakSet<Element>();
+    if (this.contextRefresh !== null) clearTimeout(this.contextRefresh);
+    this.contextRefresh = null;
     this.rasterAbort.abort();
     for (const timer of this.retryTimers.values()) clearTimeout(timer);
     this.retryTimers.clear();
@@ -167,7 +179,8 @@ export class ImageThemeEngine {
       if (image.naturalWidth === 0 || image.naturalHeight === 0) return;
       if (this.mappingPaused) { this.pendingImages.add(image); return; }
       const identity = imageIdentity(image);
-      const observation = this.observe(image);
+      const context = imageContextKey(image);
+      const observation = this.withActionHidden(image, () => this.observe(image));
       // Contextual logo decisions must not consume the temporary transparent base.
       if (document.documentElement.hasAttribute('data-semantic-dark-prepaint') &&
           observation.classification.kind === 'icon' && observation.classification.features.transparentRatio > 0.01) {
@@ -181,13 +194,61 @@ export class ImageThemeEngine {
         image.isConnected && imageIdentity(image) === identity &&
         // The shipped feature router depends on source pixels and configured canvas,
         // not on transient pre-paint colors. Only a contextual provider consumes these.
-        ((!provider && decision.authority !== 'constraint') || (getComputedStyle(image).backgroundColor === observation.elementBackground &&
-        (image.parentElement ? getComputedStyle(image.parentElement).backgroundColor : '') === observation.parentBackground));
+        ((!provider && decision.authority !== 'constraint') || imageContextKey(image) === context);
       if (!current()) { this.retryStaleImage(image, generation); return; }
       this.apply(image, observation.classification, decision);
+      if (observation.classification.kind === 'icon' && observation.classification.features.transparentRatio > 0.01) {
+        this.contexts.set(image, imageContextKey(image));
+        this.watchAncestors(image);
+      }
       if (decision.action === 'diagram') await this.applyRasterDiagram(image, current, generation);
     } catch {
       // Cross-origin/tainted and undecodable resources are intentionally kept.
+    }
+  }
+
+  /** CSSOM changes use force; ancestor mutations only requeue changed observations. */
+  rescan(force = true): void {
+    if (!this.config.enabled || this.mappingPaused) return;
+    for (const [image, context] of this.contexts) {
+      if (!image.isConnected) {
+        this.contexts.delete(image); this.processed.delete(image); this.touched.delete(image);
+        for (const attribute of [FILTER_ATTRIBUTE, KIND_ATTRIBUTE, ACTION_ATTRIBUTE, REASON_ATTRIBUTE]) image.removeAttribute(attribute);
+        continue;
+      }
+      this.watchAncestors(image);
+      if (!force && imageContextKey(image) === context) continue;
+      this.contexts.delete(image);
+      this.processed.delete(image);
+      this.queue(image);
+    }
+  }
+
+  private scheduleContextRefresh(): void {
+    this.contextRefresh ??= setTimeout(() => {
+      this.contextRefresh = null;
+      this.rescan(false);
+    }, 50);
+  }
+
+  private watchAncestors(image: HTMLImageElement): void {
+    for (let element: Element | null = image; element; element = element.parentElement) {
+      if (this.watchedAncestors.has(element)) continue;
+      this.watchedAncestors.add(element);
+      this.mutations?.observe(element, {attributes: true, attributeFilter: ['class', 'style', 'src', 'srcset', 'sizes']});
+    }
+  }
+
+  private withActionHidden<T>(image: HTMLImageElement, read: () => T): T {
+    if (!image.hasAttribute(FILTER_ATTRIBUTE)) return read();
+    image.setAttribute(GUARD_ATTRIBUTE, '');
+    void getComputedStyle(image).transitionDuration;
+    image.setAttribute(READ_ATTRIBUTE, '');
+    try { return read(); }
+    finally {
+      image.removeAttribute(READ_ATTRIBUTE);
+      void getComputedStyle(image).backgroundColor;
+      image.removeAttribute(GUARD_ATTRIBUTE);
     }
   }
 
@@ -232,6 +293,7 @@ export class ImageThemeEngine {
   }
 
   private apply(image: HTMLImageElement, classification: VisualResourceClassification, decision: AssetDecision): void {
+    image.removeAttribute(FILTER_ATTRIBUTE);
     image.setAttribute(KIND_ATTRIBUTE, `${classification.kind}:${classification.confidence.toFixed(2)}`);
     this.touched.add(image);
     image.setAttribute(REASON_ATTRIBUTE, decision.reason);
@@ -313,4 +375,17 @@ export function hasSimpleImageBackdrop(image: HTMLImageElement): boolean {
     if ((element === image || element === image.parentElement) && style.backgroundImage && style.backgroundImage !== 'none') return false;
   }
   return true;
+}
+
+// Own filter/backplate attributes do not enter this key; it is recorded after paint.
+function imageContextKey(image: HTMLImageElement): string {
+  const ancestors: string[] = [];
+  for (let element: Element | null = image; element; element = element.parentElement) {
+    const style = getComputedStyle(element);
+    ancestors.push(style.opacity, style.filter, style.backdropFilter, style.mixBlendMode);
+  }
+  return JSON.stringify([imageIdentity(image), image.className,
+    image.style.backgroundColor, image.style.backgroundImage,
+    image.style.getPropertyValue('--semantic-dark-background'),
+    image.parentElement ? getComputedStyle(image.parentElement).backgroundColor : '', ...ancestors]);
 }

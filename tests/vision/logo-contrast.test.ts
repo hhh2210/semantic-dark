@@ -34,3 +34,20 @@ it('does not infer a solid backdrop for an unknown/complex background', async ()
   expect(await decideAsset(input, undefined, new AbortController().signal))
     .toMatchObject({action: 'keep', authority: 'heuristic'});
 });
+
+
+it.each(['confidence', 'transparency'])('rejects non-finite %s before forcing a logo action', async field => {
+  const input = observation([30, 40, 80]);
+  if (field === 'confidence') input.classification.confidence = NaN;
+  else input.classification.features.transparentRatio = NaN;
+  expect(logoActionContrast(input)).toBeNull();
+  expect(await decideAsset(input, undefined, new AbortController().signal)).toMatchObject({action: 'keep'});
+});
+
+
+it('does not turn readable dark strokes white on a light mapped surface', async () => {
+  const input = observation([20, 20, 20]);
+  input.parentBackground = '#fff'; input.classification.policy = 'recolor';
+  expect(await decideAsset(input, undefined, new AbortController().signal))
+    .toMatchObject({action: 'keep', reason: 'logo-already-readable'});
+});
