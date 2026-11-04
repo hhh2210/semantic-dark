@@ -18,6 +18,7 @@ const siteNote = required<HTMLElement>('#site-note');
 const resetMode = required<HTMLButtonElement>('#reset-mode');
 const appearance = required<HTMLFieldSetElement>('#appearance');
 const background = required<HTMLInputElement>('#background');
+const localModel = required<HTMLInputElement>('#local-model');
 const contrast = required<HTMLInputElement>('#contrast');
 const contrastValue = required<HTMLOutputElement>('#contrast-value');
 const error = required<HTMLElement>('#error');
@@ -80,6 +81,7 @@ function render(): void {
   enabled.disabled = tabId === null || presentation.locked;
 
   background.value = config.background;
+  localModel.checked = config.localModel === true;
   contrast.value = String(config.minimumTextContrast);
   updateContrastLabel();
   appearance.disabled = !pageStatus.effectiveEnabled;
@@ -229,6 +231,10 @@ function hideError(): void {
 enabled.addEventListener('change', () => {
   const mode: ThemeMode = enabled.checked ? 'on' : 'off';
   persist(normalizeThemeConfig({...config, mode, enabled: mode === 'on'}));
+});
+
+localModel.addEventListener('change', () => {
+  persist(normalizeThemeConfig({...config, localModel: localModel.checked}));
 });
 
 background.addEventListener('change', () => {

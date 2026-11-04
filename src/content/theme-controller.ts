@@ -345,6 +345,7 @@ export class ThemeController {
   private setPendingOfficialGeneration(generation: number | null): void {
     this.pendingOfficialGeneration = generation;
     this.engines.dom.setMappingPaused?.(generation !== null);
+    this.engines.image.setMappingPaused?.(generation !== null);
   }
 
   private releaseOfficialTheme(): void {

@@ -1,5 +1,5 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {ImageThemeEngine} from '../../src/content/image-engine';
+import {ImageThemeEngine, hasSimpleImageBackdrop} from '../../src/content/image-engine';
 import {classifyVisualResource} from '../../src/vision';
 import type {AssetObservation} from '../../src/vision/action-policy';
 import {transformDiagramImage, type RasterImageTransform} from '../../src/content/raster-image';
@@ -46,7 +46,7 @@ describe('ImageThemeEngine cancellation', () => {
 
 
 describe('ImageThemeEngine action execution', () => {
-  function fixture(transparentIcon = false, useProvider = true) {
+  function fixture(transparentIcon = false, useProvider = true, initiallyPaused = false) {
     document.documentElement.setAttribute('data-semantic-dark-active', '');
     vi.stubGlobal('chrome', {runtime: {getURL: (path: string) => `chrome-extension://fixture/${path}`}});
     const image = document.createElement('img');
@@ -78,9 +78,23 @@ describe('ImageThemeEngine action execution', () => {
         elementBackground: getComputedStyle(current).backgroundColor,
         parentBackground: current.parentElement ? getComputedStyle(current.parentElement).backgroundColor : '',
       }));
+    engine.setMappingPaused(initiallyPaused);
     engine.start();
     return {image, engine, provider, answer};
   }
+
+  it('defers image observations while an official candidate changes the source appearance', async () => {
+    const {image, engine, provider, answer} = fixture(false, true, true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(provider.decide).not.toHaveBeenCalled();
+      expect(image.hasAttribute('data-semantic-dark-image-action')).toBe(false);
+      engine.setMappingPaused(false);
+      await vi.waitFor(() => expect(provider.decide).toHaveBeenCalledOnce());
+      answer({action: 'dim'});
+      await vi.waitFor(() => expect(image.getAttribute('data-semantic-dark-image-action')).toBe('provider:dim'));
+    } finally { engine.stop(); }
+  });
 
   it('executes an allowed provider action and restores its markers on stop', async () => {
     const {image, engine, provider, answer} = fixture();
@@ -169,4 +183,19 @@ describe('ImageThemeEngine action execution', () => {
       expect(image.hasAttribute('data-semantic-dark-image-filter')).toBe(false);
     } finally { engine.stop(); }
   });
+});
+
+
+it('does not treat opacity, filters or blending as a known solid image backdrop', () => {
+  document.body.innerHTML = '<article style="background:#333"><img></article>';
+  const image = document.querySelector('img')!;
+  expect(hasSimpleImageBackdrop(image)).toBe(true);
+  document.body.style.opacity = '0.5';
+  expect(hasSimpleImageBackdrop(image)).toBe(false);
+  document.body.style.opacity = '1';
+  image.style.filter = 'brightness(0.5)';
+  expect(hasSimpleImageBackdrop(image)).toBe(false);
+  image.style.filter = 'none';
+  image.parentElement!.style.mixBlendMode = 'multiply';
+  expect(hasSimpleImageBackdrop(image)).toBe(false);
 });
