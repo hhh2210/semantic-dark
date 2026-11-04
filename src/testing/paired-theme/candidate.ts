@@ -7,7 +7,7 @@ import {
 import {formatRgba8CssColor} from '../../color/css';
 import {
   mapRoleColorWithProfileSet,
-  mapRoleColorWithReport,
+  mapLegacyRoleColorWithReport,
   type RoleMapOptions,
   type RoleMapResult,
 } from '../../color/dark-map';
@@ -60,7 +60,7 @@ export function mapShippedCandidateTheme(
   lightTokens: LightTokenMap,
   scenes: readonly SceneDefinition[],
 ): CandidatePaintMapping[] {
-  return mapCandidateThemeUsing(lightTokens, scenes, mapRoleColorWithReport);
+  return mapCandidateThemeUsing(lightTokens, scenes, mapLegacyRoleColorWithReport);
 }
 
 function mapCandidateThemeUsing(

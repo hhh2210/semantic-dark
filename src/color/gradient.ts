@@ -2,7 +2,7 @@ import {compositeSrgb} from './composite';
 import {relativeLuminance} from './contrast';
 import {formatRgba8CssColor, parseCssColor} from './css';
 import {mapRoleColor} from './dark-map';
-import {quantizeSrgb8} from './srgb';
+import {quantizeSrgb8, linearChannelToSrgb} from './srgb';
 import type {SrgbColor} from './types';
 
 const COLOR_FUNCTIONS = new Set([
@@ -19,6 +19,7 @@ export interface GradientMapResult {
   css: string;
   /** Brightest mapped stop, flattened over the configured canvas. */
   readabilityBackground: string;
+  readabilityBackgrounds: readonly string[];
 }
 
 /** Rewrite solid color stops in a computed CSS gradient without touching its geometry. */
@@ -34,10 +35,12 @@ export function mapCssGradient(
   let index = 0;
   let mappedStops = 0;
   let brightest = canvas;
+  const backgrounds: string[] = [];
 
   const mapToken = (token: string): string => {
     const source = parseCssColor(token);
-    if (!source || source.a <= 1e-6) return token;
+    if (!source) return token;
+    if (source.a <= 1e-6) { backgrounds.push(formatRgba8CssColor(canvas)); return token; }
     const mapped = mapRoleColor(source, {
       role: 'surface',
       against: canvas,
@@ -49,6 +52,7 @@ export function mapCssGradient(
       {...quantizeSrgb8(canvas), a: 1},
     ));
     if (relativeLuminance(flattened) > relativeLuminance(brightest)) brightest = flattened;
+    backgrounds.push(formatRgba8CssColor(flattened));
     mappedStops += 1;
     return formatRgba8CssColor(mapped);
   };
@@ -107,7 +111,7 @@ export function mapCssGradient(
 
   return mappedStops === 0
     ? null
-    : {css: output, readabilityBackground: formatRgba8CssColor(brightest)};
+    : {css: output, readabilityBackground: formatRgba8CssColor(brightest), readabilityBackgrounds: backgrounds};
 }
 
 function readHexColor(input: string, start: number): string | null {
@@ -158,4 +162,17 @@ function readStringEnd(input: string, start: number): number {
 function readCommentEnd(input: string, start: number): number {
   const end = input.indexOf('*/', start + 2);
   return end === -1 ? input.length : end + 2;
+}
+
+/** When a gradient crosses every usable text tone, shade it while retaining its geometry. */
+export function darkenGradientForText(gradient: GradientMapResult, minimum: number): GradientMapResult {
+  const maximum = linearChannelToSrgb(Math.max(0, 1.05 / Math.min(21, minimum + 0.01) - 0.05));
+  const alpha = Math.ceil((1 - maximum) * 255) / 255;
+  const shade = `rgb(0 0 0 / ${alpha})`;
+  const bound = formatRgba8CssColor({r: 1 - alpha, g: 1 - alpha, b: 1 - alpha, a: 1});
+  return {
+    css: `linear-gradient(${shade}, ${shade}), ${gradient.css}`,
+    readabilityBackground: bound,
+    readabilityBackgrounds: ['rgb(0 0 0)', bound],
+  };
 }

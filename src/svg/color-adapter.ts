@@ -2,7 +2,7 @@ import {mapColor} from '../color';
 
 import type {SvgColorTransformer} from './types';
 
-/** Adapter from SVG paint relationships to the shared OKLCH role mapper. */
+/** Adapter from SVG paint relationships to the shared matrix/contrast mapper. */
 export const sharedSvgColorTransformer: SvgColorTransformer = {
     mapColor(color, request) {
         return mapColor(color, {

@@ -42,6 +42,12 @@ export async function readPageState(page) {
       throw new Error(`Expected two benchmark category cells, received ${categoryCells.length}`);
     }
     return {
+      matrixSamples: ['white', 'gray', 'deep-gray', 'red', 'blue'].map((name) => {
+        const node = required(`#matrix-${name}`);
+        const style = getComputedStyle(node);
+        return {name, background: style.backgroundColor, color: style.color,
+          processed: node.hasAttribute('data-semantic-dark-background')};
+      }),
       svgProcessed: svg.hasAttribute('data-semantic-dark-svg'),
       svgHaloCount: svg.getAttribute('data-semantic-dark-halos'),
       svgFill: haloStyle.fill,
@@ -50,6 +56,8 @@ export async function readPageState(page) {
       domTextProcessed: title.hasAttribute('data-semantic-dark-color'),
       domBackground: cardStyle.backgroundColor,
       domText: titleStyle.color,
+      imageAction: image.getAttribute('data-semantic-dark-image-action'),
+      diagramAction: diagram.getAttribute('data-semantic-dark-image-action'),
       imageKind: image.getAttribute('data-semantic-dark-image-kind'),
       imageFilter: image.getAttribute('data-semantic-dark-image-filter'),
       diagramKind: diagram.getAttribute('data-semantic-dark-image-kind'),
@@ -78,6 +86,10 @@ export async function readPageState(page) {
 }
 
 export async function waitForProcessedState(page, timeout = 15_000) {
+  // New contrast fixtures push the lazy diagram below the initial viewport.
+  await page.locator('#vision-diagram').scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => document.querySelector('#vision-diagram')?.hasAttribute('data-semantic-dark-raster-status'), undefined, {timeout});
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForFunction(() => {
     const svg = document.querySelector('#semantic-halo-figure');
     const card = document.querySelector('#dom-card');
@@ -141,6 +153,7 @@ function assertSourceSvg(state, label) {
 
 export function verifyBaselineState(state) {
   assertSourceSvg(state, 'Baseline');
+  verifyMatrixSamples(state.matrixSamples, false);
   assert.equal(state.diagramSrc, '/raster-diagram.svg',
     `Baseline raster src changed unexpectedly: ${state.diagramSrc}`);
   assert.equal(state.diagramUsesBlob, false, 'Baseline raster image unexpectedly uses a Blob URL');
@@ -180,6 +193,7 @@ export function verifyTransformedState(state) {
     `Visual classifier debug attribute is missing or malformed: ${state.imageKind}`);
   assert.match(state.diagramKind ?? '', /^diagram:0\.\d{2}$/,
     `Raster fixture was not classified as a diagram: ${state.diagramKind}`);
+  assert.equal(state.diagramAction, 'heuristic:diagram', 'Default asset policy did not select the diagram executor');
   assert.equal(state.diagramRasterStatus, 'recolored',
     `Raster diagram transform did not complete: ${state.diagramRasterStatus}`);
   assert.equal(state.diagramUsesBlob, true, 'Raster diagram did not install a local Blob result');
@@ -223,6 +237,7 @@ export function verifyTransformedState(state) {
     parseRgb(state.categoryCells[1].background),
   ), 'Mapped category cells no longer form one continuous surface');
   verifyTransformedDomEffects(state.domEffects);
+  verifyMatrixSamples(state.matrixSamples, true);
 
   return {
     svgFillStrokeContrast: Number(contrastRatio(fill, stroke).toFixed(2)),
@@ -238,11 +253,14 @@ export function verifyRestoredState(state) {
   assert.equal(state.svgProcessed, false, 'Inline SVG marker remained after disabling the host');
   assert.equal(state.svgHaloCount, null, 'Inline SVG halo marker remained after disabling the host');
   assertSourceSvg(state, 'Restored');
+  verifyMatrixSamples(state.matrixSamples, false);
   assert.equal(state.domBackgroundProcessed, false,
     'DOM background marker remained after disabling the host');
   assert.equal(state.domTextProcessed, false,
     'DOM text marker remained after disabling the host');
   assert.equal(state.imageKind, null, 'Image classifier marker remained after disabling the host');
+  assert.equal(state.imageAction, null, 'Image decision marker remained after disable');
+  assert.equal(state.diagramAction, null, 'Diagram decision marker remained after disable');
   assert.equal(state.imageFilter, null, 'Image filter marker remained after disabling the host');
   assert.equal(state.diagramKind, null, 'Raster classifier marker remained after disabling the host');
   assert.equal(state.diagramRasterStatus, null, 'Raster status remained after disabling the host');
@@ -397,4 +415,26 @@ function verifySourceCategoryCells(state, label) {
     assert.ok(colorsNear(parseRgb(cell.background), [243, 243, 243]),
       `${label} category cell ${index} is not the authored #f3f3f3 surface: ${cell.background}`);
   }
+}
+
+// Fixed expected outputs validate the installed extension, not a second call
+// into its implementation. Palette tolerances cover WebKit float32 vs JS float64.
+function verifyMatrixSamples(samples, transformed) {
+  const backgrounds = transformed
+    ? [[51, 51, 51], [78, 78, 78], [92, 92, 92], [218, 92, 92], [104, 186, 255]]
+    : [[255, 255, 255], [221, 221, 221], [204, 204, 204], [198, 40, 40], [0, 102, 204]];
+  const sourceText = [[102, 102, 102], [34, 34, 34], [34, 34, 34], [255, 255, 255], [255, 255, 255]];
+  assert.equal(samples.length, backgrounds.length);
+  samples.forEach((sample, index) => {
+    assert.equal(sample.processed, transformed, `Matrix ${sample.name} processing state`);
+    assert.ok(colorsNear(parseRgb(sample.background), backgrounds[index], 1),
+      `Matrix ${sample.name} background: ${sample.background}`);
+    if (transformed) {
+      assert.ok(contrastRatio(parseRgb(sample.color), parseRgb(sample.background)) >= 4.5,
+        `Matrix ${sample.name} text must stay readable after inversion`);
+    } else {
+      assert.ok(colorsNear(parseRgb(sample.color), sourceText[index], 1),
+        `Matrix ${sample.name} text must restore its authored color`);
+    }
+  });
 }

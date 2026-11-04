@@ -19,6 +19,26 @@
         <a id="dom-link" href="#semantic-halo-figure">Inspect the inline SVG</a>
       </section>
 
+      <section class="card" aria-label="Matrix palette regression">
+        <p class="eyebrow">WebKit lightness inversion</p>
+        <div class="matrix-grid">
+          <div id="matrix-white">White surface</div>
+          <div id="matrix-gray">Gray surface</div>
+          <div id="matrix-deep-gray">Deeper gray surface</div>
+          <button id="matrix-red" type="button">White on red</button>
+          <button id="matrix-blue" type="button">White on blue</button>
+        </div>
+      </section>
+
+      <section class="card prose-card" id="contrast-regressions">
+        <h2>Text across matrix surfaces</h2>
+        <div id="inherited-medium">Inherited foreground on a medium surface</div>
+        <div id="light-gradient">Text across a light gradient</div>
+        <div id="mixed-gradient">Text across a mixed gradient</div>
+        <div id="pseudo-gradient">Generated text: </div>
+        <img id="backplate-case" src="/icon.svg" width="64" height="64" alt="transparent icon">
+      </section>
+
       <section class="card svg-card" aria-labelledby="svg-title">
         <div class="section-heading">
           <div>

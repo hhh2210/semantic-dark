@@ -11,7 +11,7 @@ import {
   type ColorRole,
   type RoleMapOptions,
 } from '../../src/color';
-import {mapRoleColorWithProfileSet} from '../../src/color/dark-map';
+import {mapRoleColorWithProfileSet, mapLegacyRoleColorWithReport} from '../../src/color/dark-map';
 import {
   BASELINE_ROLE_PROFILES_SEMANTIC_SHA256,
   COLOR_ROLES,
@@ -112,7 +112,7 @@ describe('role-profile validation and injection', () => {
     )).toThrow(/finite/);
   });
 
-  it('keeps production bit-identical while profile injection stays outside its options', () => {
+  it('keeps the historical baseline bit-identical while production uses the matrix', () => {
     type ProductionOptionsContainProfiles = 'profiles' extends keyof RoleMapOptions ? true : false;
     const productionOptionsContainProfiles: ProductionOptionsContainProfiles = false;
     expect(productionOptionsContainProfiles).toBe(false);
@@ -124,7 +124,7 @@ describe('role-profile validation and injection', () => {
     for (const role of COLOR_ROLES as readonly ColorRole[]) {
       for (const source of sources) {
         const options = {role, against: srgb(0.05, 0.06, 0.07)} as const;
-        expect(mapRoleColorWithReport(source, options)).toEqual(
+        expect(mapLegacyRoleColorWithReport(source, options)).toEqual(
           mapRoleColorWithProfileSet(source, options, profiles),
         );
       }

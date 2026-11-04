@@ -12,7 +12,7 @@ beforeEach(() => {
   read = vi.fn(async () => ({...status}));
   vi.stubGlobal('chrome', {
     tabs: {query: vi.fn(async () => [{id: 1, url: 'https://example.com'}]), sendMessage: read},
-    runtime: {sendMessage: vi.fn(async () => DEFAULT_THEME)},
+    runtime: {getManifest: () => ({version: '0.4.0'}), sendMessage: vi.fn(async () => DEFAULT_THEME)},
   });
 });
 afterEach(async () => {
@@ -25,6 +25,7 @@ afterEach(async () => {
 describe('popup status refresh', () => {
   it('keeps checking through slow CSS and unlocks on the terminal decision', async () => {
     await import('../src/popup');
+    expect(document.querySelector('#version')?.textContent).toBe('v0.4.0');
     await vi.advanceTimersByTimeAsync(2500);
     expect(document.querySelector('#site-state')?.textContent).toBe('Checking');
     expect(read.mock.calls.length).toBeGreaterThan(12);

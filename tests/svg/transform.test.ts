@@ -108,7 +108,7 @@ describe('transformInlineSvg', () => {
         expect(label.getAttribute('style')).toBeNull();
     });
 
-    it('uses the shared OKLCH color engine when no adapter is supplied', () => {
+    it('uses the shared matrix/contrast color engine when no adapter is supplied', () => {
         const svg = mountSvg(`
             <svg xmlns="http://www.w3.org/2000/svg">
               <text id="label" fill="#20242a" stroke="#fff"

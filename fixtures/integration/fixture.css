@@ -219,3 +219,19 @@ a {
 #benchmark-hover-row:hover {
   background: #f8f8f8;
 }
+
+.matrix-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.matrix-grid > * { padding: 16px; border: 0; border-radius: 8px; font: inherit; }
+#matrix-white { background: #fff; color: #666; }
+#matrix-gray { background: #ddd; color: #222; }
+#matrix-deep-gray { background: #ccc; color: #222; }
+#matrix-red { background: #c62828; color: #fff; }
+#matrix-blue { background: #0066cc; color: #fff; }
+
+#contrast-regressions { background:#fff; color:#000; }
+#inherited-medium { background:#999; padding:20px; }
+#light-gradient, #mixed-gradient { height:80px; line-height:80px; padding:0 30px; }
+#light-gradient { background:linear-gradient(#333, #555); color:#ccc; }
+#mixed-gradient { background:linear-gradient(#fff, #000); color:#777; }
+#pseudo-gradient::before { content:"Pseudo gradient"; display:block; height:80px; line-height:80px; padding:0 30px; background:linear-gradient(#333,#555); color:#ccc; }
+#backplate-case { background:#ddd; }

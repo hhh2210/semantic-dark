@@ -1,3 +1,4 @@
+import {decideAsset, type AssetDecision, type AssetDecisionProvider, type AssetObservation} from '../vision/action-policy';
 import {
   classifyVisualResource,
   refineVisualResourceClassification,
@@ -9,6 +10,7 @@ import {RasterWorkerClient} from './raster-worker-client';
 import {upgradeInsecureMedia} from './upgrade-insecure';
 
 const FILTER_ATTRIBUTE = 'data-semantic-dark-image-filter';
+const ACTION_ATTRIBUTE = 'data-semantic-dark-image-action';
 const KIND_ATTRIBUTE = 'data-semantic-dark-image-kind';
 const RASTER_ATTRIBUTE = 'data-semantic-dark-raster-status';
 const RASTER_TIME_ATTRIBUTE = 'data-semantic-dark-raster-ms';
@@ -20,6 +22,7 @@ const STYLE_ID = 'semantic-dark-image-sheet';
 const IMAGE_STYLE = `
 img[${FILTER_ATTRIBUTE}="dim"] { filter: brightness(.82) contrast(1.04) !important; }
 img[${FILTER_ATTRIBUTE}="recolor"] { filter: brightness(0) invert(.92) !important; }
+:root[data-semantic-dark-active] img[${FILTER_ATTRIBUTE}="backplate"]:not([data-semantic-dark-updating]) { background-color: white !important; }
 `;
 
 function ensureStyle(): void {
@@ -44,10 +47,11 @@ export class ImageThemeEngine {
   private readonly rasterWorker = new RasterWorkerClient();
   private rasterAbort = new AbortController();
   private generation = 0;
+  private readonly retryTimers = new Map<HTMLImageElement, ReturnType<typeof setTimeout>>();
   private intersection: IntersectionObserver | null = null;
   private mutations: MutationObserver | null = null;
 
-  constructor(config: ThemeConfig) {
+  constructor(config: ThemeConfig, private readonly decisionProvider?: AssetDecisionProvider) {
     this.config = config;
   }
 
@@ -92,6 +96,8 @@ export class ImageThemeEngine {
   stop(): void {
     this.generation += 1;
     this.rasterAbort.abort();
+    for (const timer of this.retryTimers.values()) clearTimeout(timer);
+    this.retryTimers.clear();
     this.rasterWorker.stop();
     this.intersection?.disconnect();
     this.intersection = null;
@@ -101,6 +107,7 @@ export class ImageThemeEngine {
     for (const image of this.touched) {
       image.removeAttribute(FILTER_ATTRIBUTE);
       image.removeAttribute(KIND_ATTRIBUTE);
+      image.removeAttribute(ACTION_ATTRIBUTE);
       image.removeAttribute(RASTER_ATTRIBUTE);
       image.removeAttribute(RASTER_TIME_ATTRIBUTE);
       image.removeAttribute(RASTER_MAIN_TIME_ATTRIBUTE);
@@ -137,18 +144,34 @@ export class ImageThemeEngine {
       if (!image.complete) await image.decode();
       if (!this.config.enabled || generation !== this.generation || this.rasterAbort.signal.aborted) return;
       if (image.naturalWidth === 0 || image.naturalHeight === 0) return;
-      const classification = this.classify(image);
-      if (!this.config.enabled || generation !== this.generation) return;
-      this.apply(image, classification);
-      if (classification.kind === 'diagram' && classification.confidence >= 0.58) {
-        await this.applyRasterDiagram(image);
-      }
+      const identity = imageIdentity(image);
+      const observation = this.observe(image);
+      const decision = await decideAsset(observation, this.decisionProvider, this.rasterAbort.signal);
+      const current = () => this.config.enabled && generation === this.generation &&
+        image.isConnected && imageIdentity(image) === identity &&
+        // The shipped feature router depends on source pixels and configured canvas,
+        // not on transient pre-paint colors. Only a contextual provider consumes these.
+        (!this.decisionProvider || (getComputedStyle(image).backgroundColor === observation.elementBackground &&
+        (image.parentElement ? getComputedStyle(image.parentElement).backgroundColor : '') === observation.parentBackground));
+      if (!current()) { this.retryStaleImage(image, generation); return; }
+      this.apply(image, observation.classification, decision);
+      if (decision.action === 'diagram') await this.applyRasterDiagram(image, current, generation);
     } catch {
       // Cross-origin/tainted and undecodable resources are intentionally kept.
     }
   }
 
-  private classify(image: HTMLImageElement): VisualResourceClassification {
+  private retryStaleImage(image: HTMLImageElement, generation: number): void {
+    if (!this.config.enabled || generation !== this.generation || !image.isConnected || this.retryTimers.has(image)) return;
+    this.retryTimers.set(image, setTimeout(() => {
+      this.retryTimers.delete(image);
+      if (!this.config.enabled || generation !== this.generation || !image.isConnected) return;
+      this.processed.delete(image);
+      this.queue(image);
+    }, 100));
+  }
+
+  private observe(image: HTMLImageElement): AssetObservation {
     const scale = Math.min(1, 128 / Math.max(image.naturalWidth, image.naturalHeight));
     const width = Math.max(1, Math.round(image.naturalWidth * scale));
     const height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -159,7 +182,7 @@ export class ImageThemeEngine {
     if (!context) throw new Error('2D canvas unavailable');
     context.drawImage(image, 0, 0, width, height);
     const pixels = context.getImageData(0, 0, width, height);
-    return refineVisualResourceClassification(
+    const classification = refineVisualResourceClassification(
       classifyVisualResource(pixels, {maxSamples: 4096}),
       {
         alternativeText: image.alt,
@@ -168,20 +191,26 @@ export class ImageThemeEngine {
         ...(image.getAttribute('role') == null ? {} : {role: image.getAttribute('role')!}),
       },
     );
+    return {
+      schema: 'semantic-dark.asset-decision.v1', source: image.currentSrc || image.src,
+      pixels, classification, canvasBackground: this.config.background,
+      elementBackground: getComputedStyle(image).backgroundColor,
+      parentBackground: image.parentElement ? getComputedStyle(image.parentElement).backgroundColor : '',
+    };
   }
 
-  private apply(image: HTMLImageElement, classification: VisualResourceClassification): void {
+  private apply(image: HTMLImageElement, classification: VisualResourceClassification, decision: AssetDecision): void {
     image.setAttribute(KIND_ATTRIBUTE, `${classification.kind}:${classification.confidence.toFixed(2)}`);
     this.touched.add(image);
-    if (classification.confidence < 0.58) return;
-    if (classification.policy === 'dim' || classification.policy === 'recolor') {
-      image.setAttribute(FILTER_ATTRIBUTE, classification.policy);
+    image.setAttribute(ACTION_ATTRIBUTE, `${decision.authority}:${decision.action}`);
+    if (decision.action === 'dim' || decision.action === 'monochrome' || decision.action === 'backplate') {
+      image.setAttribute(FILTER_ATTRIBUTE, decision.action === 'monochrome' ? 'recolor' : decision.action);
     }
     // Diagrams are deliberately left untouched here. They need palette/region
     // rewriting, not the whole-image filter that caused the original problem.
   }
 
-  private async applyRasterDiagram(image: HTMLImageElement): Promise<void> {
+  private async applyRasterDiagram(image: HTMLImageElement, isCurrent: () => boolean, generation: number): Promise<void> {
     const signal = this.rasterAbort.signal;
     const transformed = await transformDiagramImage(
       image,
@@ -189,7 +218,8 @@ export class ImageThemeEngine {
       this.rasterWorker,
       signal,
     );
-    if (signal.aborted || !this.config.enabled) return;
+    if (signal.aborted) return;
+    if (!isCurrent()) { this.retryStaleImage(image, generation); return; }
     if (!transformed) {
       image.setAttribute(RASTER_ATTRIBUTE, 'abstained:pixel-budget');
       return;
@@ -231,4 +261,10 @@ function setRasterMetrics(
 function restoreAttribute(element: Element, name: string, value: string | null): void {
   if (value === null) element.removeAttribute(name);
   else element.setAttribute(name, value);
+}
+
+// Bind async decisions to the same resource selection and decode dimensions.
+function imageIdentity(image: HTMLImageElement): string {
+  return JSON.stringify([image.currentSrc, image.getAttribute('src'), image.getAttribute('srcset'),
+    image.getAttribute('sizes'), image.naturalWidth, image.naturalHeight]);
 }
