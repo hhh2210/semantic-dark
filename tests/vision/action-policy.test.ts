@@ -34,6 +34,8 @@ describe('asset action decision boundary', () => {
     expect(allowedAssetActions(classification)).not.toContain('backplate');
     classification.features.transparentRatio = 0.5;
     expect(allowedAssetActions(classification)).toContain('backplate');
+    classification.kind = 'icon'; classification.policy = 'keep';
+    expect(allowedAssetActions(classification)).toEqual(['keep', 'dim', 'backplate']);
   });
 
   it('never lets a photo decision select monochrome or diagram recoloring', () => {

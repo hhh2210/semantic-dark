@@ -1,3 +1,4 @@
+import {logoActionContrast} from './logo-contrast';
 import type {RGBAImage, VisualResourceClassification} from './types';
 
 export type AssetAction = 'keep' | 'dim' | 'monochrome' | 'diagram' | 'backplate';
@@ -11,16 +12,19 @@ export interface AssetObservation {
   canvasBackground: string;
   elementBackground: string;
   parentBackground: string;
+  simpleBackdrop?: boolean;
 }
 
 export interface AssetDecision {
   action: AssetAction;
-  authority: 'heuristic' | 'provider' | 'fallback';
+  authority: 'heuristic' | 'provider' | 'fallback' | 'constraint';
   reason: string;
 }
 
 /** Injection point for a local model. No network/backend is installed by default. */
 export interface AssetDecisionProvider {
+  requiresOptIn?: boolean;
+  isApplicable?(observation: AssetObservation): boolean;
   decide(observation: AssetObservation, allowed: readonly AssetAction[], signal: AbortSignal): Promise<unknown>;
 }
 
@@ -30,7 +34,7 @@ export function allowedAssetActions(value: VisualResourceClassification): readon
   const backing: AssetAction[] = value.features.transparentRatio > 0.01 ? ['backplate'] : [];
   if (value.kind === 'diagram') return ['keep', 'dim', 'diagram', ...backing];
   if (value.kind === 'icon' && value.policy === 'recolor') return ['keep', 'dim', 'monochrome', ...backing];
-  return ['keep', 'dim'];
+  return ['keep', 'dim', ...(value.kind === 'icon' ? backing : [])];
 }
 
 export function heuristicAssetDecision(value: VisualResourceClassification): AssetDecision {
@@ -49,6 +53,10 @@ export async function decideAsset(
 ): Promise<AssetDecision> {
   const fallback = (reason: string): AssetDecision => ({action: 'keep', authority: 'fallback', reason});
   if (signal.aborted) return fallback('cancelled');
+  const contrast = logoActionContrast(observation);
+  if (contrast && contrast.keep < 3 && contrast.backplate >= 3) {
+    return {action: 'backplate', authority: 'constraint', reason: 'transparent-logo-contrast'};
+  }
   if (!provider) return heuristicAssetDecision(observation.classification);
   const allowed = Object.freeze([...allowedAssetActions(observation.classification)]);
   if (allowed.length === 1) return fallback('ineligible');
@@ -70,9 +78,11 @@ export async function decideAsset(
     ]);
     if (signal.aborted) return fallback('cancelled');
     if (deadlineExpired || performance.now() >= deadline) return fallback('timeout');
-    if (!answer || typeof answer !== 'object' || !('action' in answer) ||
+    if (!answer || typeof answer !== 'object' || !('action' in answer) || typeof answer.action !== 'string' ||
         !allowed.includes(answer.action as AssetAction)) return fallback('invalid-or-disallowed-action');
-    return {action: answer.action as AssetAction, authority: 'provider', reason: 'selected-allowed-action'};
+    if (contrast && answer.action !== 'keep' && answer.action in contrast &&
+        contrast[answer.action as keyof typeof contrast] < 3) return fallback('logo-contrast-rejected');
+    return {action: answer.action as AssetAction, authority: 'provider', reason: 'cached' in answer && answer.cached === true ? 'cached-provider-action' : 'selected-allowed-action'};
   } catch {
     return fallback('provider-error');
   } finally {

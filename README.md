@@ -68,8 +68,9 @@ relationships, raster diagrams, and ordinary images take separate paths.
   locally. Stop, palette change, and popup disable restore the original
   DOM/SVG/image state and revoke generated Blob URLs.
 
-No page pixels or DOM content leave the browser. See [PRIVACY.md](PRIVACY.md)
-for the exact data and permission boundaries.
+By default, processing stays inside the browser. Experimental local logo repair
+sends only bounded pixels and background colors to the loopback companion, never
+a cloud endpoint. See [PRIVACY.md](PRIVACY.md) for the data boundary.
 
 ## Load it in Chrome
 
@@ -119,11 +120,23 @@ late results, including worker output. Stale observations are debounced and
 reobserved instead of leaving the asset permanently unprocessed. Backplates leave image pixels untouched
 and restore by removing the extension's marker.
 
-No model weights, remote calls, decision cache, or trained-provider activation
-are included. The provider path is tested with controlled responders; this is
-an integration contract, not evidence of learned-policy quality. Existing
-classifier eligibility is heuristic, not calibrated safety. Action labels must
-be recollected against the matrix-enabled runtime before training / evaluation.
+Version 0.4.1 adds a numeric visibility check for transparent logos on known
+solid backdrops. A dark logo that cannot reach 3:1 contrast gets a white backing
+when that backing meets the threshold, without any model call. A model-selected
+backing that would hide bright logo strokes is rejected.
+
+The popup's **Local logo repair (experimental)** switch is per host and off by
+default. It enables a real local companion only for transparent colored logos;
+other images keep their normal processing. The companion uses already-installed,
+validated OneJev weights, keeps at most 32 input-hash decisions in memory, and
+has an explicit call cap. No weights are bundled or downloaded automatically.
+Unavailable, busy or slow companions preserve the image. Turning the switch off
+cancels page work; stop the companion separately to release its model memory.
+
+See [System 1 integration and evidence](docs/SYSTEM1-V041.md) for the launch
+command, actual-model E2E and remaining quality/latency limits. New-input model
+utility has not been established by this small diagnostic; the successful cache
+path must not be reported as uncached inference performance.
 
 ## ML status
 

@@ -1,3 +1,4 @@
+import {relayAssetDecision, type AssetDecisionMessage} from './local-model-relay';
 import {
   configStorageKey as keyFor,
   normalizeThemeConfig,
@@ -17,7 +18,11 @@ chrome.storage.onChanged.addListener((_changes, area) => {
   if (area === 'local') void syncPrepaint();
 });
 
-chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: RuntimeMessage | AssetDecisionMessage, _sender, sendResponse) => {
+  if (message.type === 'semantic-dark:asset-decision') {
+    void relayAssetDecision(message, _sender).then(sendResponse).catch(() => sendResponse(null));
+    return true;
+  }
   if (message.type === 'semantic-dark:get-config') {
     chrome.storage.local.get(keyFor(message.host)).then((record) => {
       sendResponse(normalizeThemeConfig(

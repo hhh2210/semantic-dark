@@ -6,6 +6,7 @@ export interface ThemeConfig {
   mode?: ThemeMode;
   background: string;
   minimumTextContrast: number;
+  localModel?: boolean;
 }
 
 export interface NormalizedThemeConfig extends ThemeConfig {
@@ -34,6 +35,7 @@ export function normalizeThemeConfig(
     : input?.enabled === false ? 'off' : 'auto';
   return {
     enabled: mode !== 'off',
+    ...(input?.localModel === true ? {localModel: true} : {}),
     mode,
     background: typeof input?.background === 'string'
       ? input.background

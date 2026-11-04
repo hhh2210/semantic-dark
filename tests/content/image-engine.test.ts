@@ -46,7 +46,7 @@ describe('ImageThemeEngine cancellation', () => {
 
 
 describe('ImageThemeEngine action execution', () => {
-  function fixture(transparentIcon = false, useProvider = true) {
+  function fixture(transparentIcon = false, useProvider = true, initiallyPaused = false) {
     document.documentElement.setAttribute('data-semantic-dark-active', '');
     vi.stubGlobal('chrome', {runtime: {getURL: (path: string) => `chrome-extension://fixture/${path}`}});
     const image = document.createElement('img');
@@ -78,9 +78,23 @@ describe('ImageThemeEngine action execution', () => {
         elementBackground: getComputedStyle(current).backgroundColor,
         parentBackground: current.parentElement ? getComputedStyle(current.parentElement).backgroundColor : '',
       }));
+    engine.setMappingPaused(initiallyPaused);
     engine.start();
     return {image, engine, provider, answer};
   }
+
+  it('defers image observations while an official candidate changes the source appearance', async () => {
+    const {image, engine, provider, answer} = fixture(false, true, true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(provider.decide).not.toHaveBeenCalled();
+      expect(image.hasAttribute('data-semantic-dark-image-action')).toBe(false);
+      engine.setMappingPaused(false);
+      await vi.waitFor(() => expect(provider.decide).toHaveBeenCalledOnce());
+      answer({action: 'dim'});
+      await vi.waitFor(() => expect(image.getAttribute('data-semantic-dark-image-action')).toBe('provider:dim'));
+    } finally { engine.stop(); }
+  });
 
   it('executes an allowed provider action and restores its markers on stop', async () => {
     const {image, engine, provider, answer} = fixture();

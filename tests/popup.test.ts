@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {DEFAULT_THEME, type PageThemeStatus} from '../src/types';
 
+const extensionVersion = JSON.parse(readFileSync('extension/manifest.json', 'utf8')).version;
 let status: PageThemeStatus;
 let read: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -12,7 +13,7 @@ beforeEach(() => {
   read = vi.fn(async () => ({...status}));
   vi.stubGlobal('chrome', {
     tabs: {query: vi.fn(async () => [{id: 1, url: 'https://example.com'}]), sendMessage: read},
-    runtime: {getManifest: () => ({version: '0.4.0'}), sendMessage: vi.fn(async () => DEFAULT_THEME)},
+    runtime: {getManifest: () => ({version: extensionVersion}), sendMessage: vi.fn(async () => DEFAULT_THEME)},
   });
 });
 afterEach(async () => {
@@ -25,7 +26,7 @@ afterEach(async () => {
 describe('popup status refresh', () => {
   it('keeps checking through slow CSS and unlocks on the terminal decision', async () => {
     await import('../src/popup');
-    expect(document.querySelector('#version')?.textContent).toBe('v0.4.0');
+    expect(document.querySelector('#version')?.textContent).toBe(`v${extensionVersion}`);
     await vi.advanceTimersByTimeAsync(2500);
     expect(document.querySelector('#site-state')?.textContent).toBe('Checking');
     expect(read.mock.calls.length).toBeGreaterThan(12);

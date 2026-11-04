@@ -1,3 +1,4 @@
+import {localModelProvider} from './local-model-provider';
 import {DomThemeEngine} from './dom-engine';
 import {ImageThemeEngine} from './image-engine';
 import {NativeDarkDetector} from './native-dark';
@@ -39,7 +40,7 @@ void loadConfig().then((config) => {
   const dormant = {...config, enabled: false};
   const dom = new DomThemeEngine(dormant);
   const svg = new SvgThemeEngine(dormant);
-  const image = new ImageThemeEngine(dormant);
+  const image = new ImageThemeEngine(dormant, localModelProvider);
   controller = new ThemeController(config, new NativeDarkDetector(), {dom, svg, image}, {
     // A frame may be a transparent embed; only a top-level page owns its canvas.
     prepaint: window === window.top,

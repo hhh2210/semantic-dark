@@ -1,3 +1,4 @@
+import {parseCssColor} from '../color';
 import {decideAsset, type AssetDecision, type AssetDecisionProvider, type AssetObservation} from '../vision/action-policy';
 import {
   classifyVisualResource,
@@ -10,6 +11,7 @@ import {RasterWorkerClient} from './raster-worker-client';
 import {upgradeInsecureMedia} from './upgrade-insecure';
 
 const FILTER_ATTRIBUTE = 'data-semantic-dark-image-filter';
+const REASON_ATTRIBUTE = 'data-semantic-dark-image-reason';
 const ACTION_ATTRIBUTE = 'data-semantic-dark-image-action';
 const KIND_ATTRIBUTE = 'data-semantic-dark-image-kind';
 const RASTER_ATTRIBUTE = 'data-semantic-dark-raster-status';
@@ -47,6 +49,8 @@ export class ImageThemeEngine {
   private readonly rasterWorker = new RasterWorkerClient();
   private rasterAbort = new AbortController();
   private generation = 0;
+  private mappingPaused = false;
+  private readonly pendingImages = new Set<HTMLImageElement>();
   private readonly retryTimers = new Map<HTMLImageElement, ReturnType<typeof setTimeout>>();
   private intersection: IntersectionObserver | null = null;
   private mutations: MutationObserver | null = null;
@@ -83,18 +87,34 @@ export class ImageThemeEngine {
 
   update(config: ThemeConfig): void {
     const wasEnabled = this.config.enabled;
+    const modelChanged = config.localModel !== this.config.localModel;
     const paletteChanged = config.background !== this.config.background;
     this.config = config;
     if (!config.enabled) this.stop();
     else if (!wasEnabled) this.start();
-    else if (paletteChanged) {
+    else if (paletteChanged || modelChanged) {
       this.stop();
       this.start();
     }
   }
 
+  setMappingPaused(paused: boolean): void {
+    this.mappingPaused = paused;
+    if (!paused && this.config.enabled) {
+      const pending = [...this.pendingImages];
+      this.pendingImages.clear();
+      for (const image of pending) {
+        if (!image.isConnected) continue;
+        this.processed.delete(image);
+        this.queue(image);
+      }
+    }
+  }
+
   stop(): void {
     this.generation += 1;
+    this.mappingPaused = false;
+    this.pendingImages.clear();
     this.rasterAbort.abort();
     for (const timer of this.retryTimers.values()) clearTimeout(timer);
     this.retryTimers.clear();
@@ -108,6 +128,7 @@ export class ImageThemeEngine {
       image.removeAttribute(FILTER_ATTRIBUTE);
       image.removeAttribute(KIND_ATTRIBUTE);
       image.removeAttribute(ACTION_ATTRIBUTE);
+      image.removeAttribute(REASON_ATTRIBUTE);
       image.removeAttribute(RASTER_ATTRIBUTE);
       image.removeAttribute(RASTER_TIME_ATTRIBUTE);
       image.removeAttribute(RASTER_MAIN_TIME_ATTRIBUTE);
@@ -144,14 +165,23 @@ export class ImageThemeEngine {
       if (!image.complete) await image.decode();
       if (!this.config.enabled || generation !== this.generation || this.rasterAbort.signal.aborted) return;
       if (image.naturalWidth === 0 || image.naturalHeight === 0) return;
+      if (this.mappingPaused) { this.pendingImages.add(image); return; }
       const identity = imageIdentity(image);
       const observation = this.observe(image);
-      const decision = await decideAsset(observation, this.decisionProvider, this.rasterAbort.signal);
-      const current = () => this.config.enabled && generation === this.generation &&
+      // Contextual logo decisions must not consume the temporary transparent base.
+      if (document.documentElement.hasAttribute('data-semantic-dark-prepaint') &&
+          observation.classification.kind === 'icon' && observation.classification.features.transparentRatio > 0.01) {
+        this.retryStaleImage(image, generation);
+        return;
+      }
+      const provider = (this.decisionProvider?.requiresOptIn && !this.config.localModel) ||
+        this.decisionProvider?.isApplicable?.(observation) === false ? undefined : this.decisionProvider;
+      const decision = await decideAsset(observation, provider, this.rasterAbort.signal);
+      const current = () => this.config.enabled && !this.mappingPaused && generation === this.generation &&
         image.isConnected && imageIdentity(image) === identity &&
         // The shipped feature router depends on source pixels and configured canvas,
         // not on transient pre-paint colors. Only a contextual provider consumes these.
-        (!this.decisionProvider || (getComputedStyle(image).backgroundColor === observation.elementBackground &&
+        ((!provider && decision.authority !== 'constraint') || (getComputedStyle(image).backgroundColor === observation.elementBackground &&
         (image.parentElement ? getComputedStyle(image.parentElement).backgroundColor : '') === observation.parentBackground));
       if (!current()) { this.retryStaleImage(image, generation); return; }
       this.apply(image, observation.classification, decision);
@@ -163,6 +193,7 @@ export class ImageThemeEngine {
 
   private retryStaleImage(image: HTMLImageElement, generation: number): void {
     if (!this.config.enabled || generation !== this.generation || !image.isConnected || this.retryTimers.has(image)) return;
+    if (this.mappingPaused) { this.pendingImages.add(image); return; }
     this.retryTimers.set(image, setTimeout(() => {
       this.retryTimers.delete(image);
       if (!this.config.enabled || generation !== this.generation || !image.isConnected) return;
@@ -196,12 +227,16 @@ export class ImageThemeEngine {
       pixels, classification, canvasBackground: this.config.background,
       elementBackground: getComputedStyle(image).backgroundColor,
       parentBackground: image.parentElement ? getComputedStyle(image.parentElement).backgroundColor : '',
+      simpleBackdrop: getComputedStyle(image).backgroundImage === 'none' && !!image.parentElement &&
+        getComputedStyle(image.parentElement).backgroundImage === 'none' &&
+        parseCssColor(getComputedStyle(image.parentElement).backgroundColor)?.a === 1,
     };
   }
 
   private apply(image: HTMLImageElement, classification: VisualResourceClassification, decision: AssetDecision): void {
     image.setAttribute(KIND_ATTRIBUTE, `${classification.kind}:${classification.confidence.toFixed(2)}`);
     this.touched.add(image);
+    image.setAttribute(REASON_ATTRIBUTE, decision.reason);
     image.setAttribute(ACTION_ATTRIBUTE, `${decision.authority}:${decision.action}`);
     if (decision.action === 'dim' || decision.action === 'monochrome' || decision.action === 'backplate') {
       image.setAttribute(FILTER_ATTRIBUTE, decision.action === 'monochrome' ? 'recolor' : decision.action);
