@@ -533,6 +533,11 @@ describe('ThemeController async reconciliation', () => {
     }
     class RescanEngine extends FakeEngine {
       rescans = 0;
+      paused = false;
+      setMappingPaused(paused: boolean): void {
+        if (!paused) expect(official.applied).toBe(false);
+        this.paused = paused;
+      }
       rescan(): void { this.rescans += 1; }
     }
     const official = new SettlingOfficial();
@@ -551,12 +556,14 @@ describe('ThemeController async reconciliation', () => {
     official.onSettle = () => {
       controller.rescan();
       rescansWhilePending = dom.rescans - afterStart;
+      expect(dom.paused).toBe(true);
     };
 
     detector.emit(true);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(rescansWhilePending).toBe(0);
+    expect(dom.paused).toBe(false);
     expect(official.applied).toBe(false);
     expect(dom.rescans - afterStart).toBe(1);
     expect(controller.getStatus().decision).toBe('applied-light');

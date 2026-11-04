@@ -18,6 +18,7 @@ const MAX_OFFICIAL_ATTEMPTS = 2;
 export interface ThemeEngineLike {
   update(config: ThemeConfig): void;
   rescan?(): void;
+  setMappingPaused?(paused: boolean): void;
 }
 
 export interface ThemeEngineSet {
@@ -267,13 +268,13 @@ export class ThemeController {
     for (const [index, recipes] of candidates.entries()) {
       // The previous candidate may have overlapped a site/SPA theme change.
       if (index > 0 && this.sampleAuthoredTheme().kind !== 'light') return 'failed';
-      this.pendingOfficialGeneration = generation;
+      this.setPendingOfficialGeneration(generation);
       for (const recipe of recipes) {
         if (recipe.type === 'stylesheet') this.officialStylesheetLoads.add(recipe.link);
       }
       this.mutateAuthoredTheme(() => this.officialTheme.activate(recipes));
       if (!this.officialTheme.isApplied()) {
-        this.pendingOfficialGeneration = null;
+        this.setPendingOfficialGeneration(null);
         continue;
       }
       await this.officialTheme.settle?.(signal);
@@ -285,7 +286,7 @@ export class ThemeController {
       if (officialThemeLooksApplied(after)) {
         this.deactivate();
         this.officialFailures = 0;
-        this.pendingOfficialGeneration = null;
+        this.setPendingOfficialGeneration(null);
         this.setStatus('official-dark', 'official-theme-activated');
         return 'applied';
       }
@@ -305,13 +306,17 @@ export class ThemeController {
       keys.every((key, index) => key === this.officialRecipeKeys[index]);
   }
 
+  private setPendingOfficialGeneration(generation: number | null): void {
+    this.pendingOfficialGeneration = generation;
+    this.engines.dom.setMappingPaused?.(generation !== null);
+  }
+
   private releaseOfficialTheme(): void {
-    this.pendingOfficialGeneration = null;
-    if (this.officialTheme.isApplied()) {
-      this.mutateAuthoredTheme(() => this.officialTheme.restore());
-      // Content mapped while the candidate was applied read its colors.
-      this.rescan();
-    }
+    const applied = this.officialTheme.isApplied();
+    if (applied) this.mutateAuthoredTheme(() => this.officialTheme.restore());
+    // Resume only after rollback, so observers/idle work never read candidate CSS.
+    this.setPendingOfficialGeneration(null);
+    if (applied) this.rescan();
   }
 
   private mutateAuthoredTheme(run: () => void): void {

@@ -1,4 +1,4 @@
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {DomThemeEngine} from '../../src/content/dom-engine';
 import {DOM_ATTRIBUTE, domOverrideCss} from '../../src/content/dom-style-contract';
 import {DEFAULT_THEME} from '../../src/types';
@@ -10,6 +10,7 @@ function nextTask(): Promise<void> {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const engine of running) engine.stop();
   running.length = 0;
   document.documentElement.innerHTML = '<head></head><body></body>';
@@ -154,6 +155,8 @@ describe('DomThemeEngine', () => {
     engine.start();
     await nextTask();
 
+    // This unit checks mutation ordering. Real frame budgets are checked by E2E.
+    vi.spyOn(performance, 'now').mockReturnValue(0);
     const panel = document.createElement('section');
     panel.innerHTML = '<div id="item" style="background:#f6f8fa;color:#111">Inserted</div>';
     panel.style.background = '#fff';
@@ -206,6 +209,64 @@ describe('DomThemeEngine', () => {
     }
     expect(app.style.getPropertyValue('--semantic-dark-background')).not.toBe(before);
   }, 15_000);
+
+  it('defers descendants with their large parent, then maps them against its new background', async () => {
+    document.head.innerHTML = '<style>#app{background:#fff}#app.changed{background:#3478aa}#child{color:#777}</style>';
+    document.body.innerHTML = `<div id="app"><p id="child">Child</p>${'<div></div>'.repeat(520)}</div>`;
+    const app = document.querySelector<HTMLElement>('#app')!;
+    const child = document.querySelector<HTMLElement>('#child')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const before = child.style.getPropertyValue('--semantic-dark-color');
+    const idle: Array<(deadline: {didTimeout: boolean; timeRemaining(): number}) => void> = [];
+    vi.stubGlobal('requestIdleCallback', (callback: typeof idle[number]) => { idle.push(callback); return 1; });
+    try {
+      app.classList.add('changed');
+      await Promise.resolve();
+      expect(child.style.getPropertyValue('--semantic-dark-color')).toBe(before);
+      const queued = (engine as unknown as {queued: WeakSet<Element>}).queued;
+      expect(queued.has(app)).toBe(true);
+      expect(queued.has(child)).toBe(true);
+      while (idle.length) idle.shift()!({didTimeout: true, timeRemaining: () => 100});
+      const {mapColor} = await import('../../src/color');
+      expect(child.style.getPropertyValue('--semantic-dark-color')).toBe(mapColor('#777', {
+        role: 'text', background: app.style.getPropertyValue('--semantic-dark-background'),
+        minContrast: DEFAULT_THEME.minimumTextContrast, preserveHue: true,
+      }));
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('keeps observers, state events and idle rescans from mapping a temporary official candidate', async () => {
+    document.head.innerHTML = '<style>#card{background:#fff;color:#222}.candidate #card{background:#234;color:#fff}</style>';
+    document.body.innerHTML = '<article id="card">Original</article>';
+    const card = document.querySelector<HTMLElement>('#card')!;
+    const engine = new DomThemeEngine(DEFAULT_THEME);
+    running.push(engine);
+    engine.start();
+    await nextTask();
+    const shadow = card.attachShadow({mode: 'open'});
+    shadow.innerHTML = '<p style="color:#333">Shadow</p>';
+    engine.rescan();
+    await nextTask();
+    const before = card.style.cssText;
+    engine.setMappingPaused(true);
+    document.body.classList.add('candidate');
+    card.insertAdjacentHTML('beforeend', '<p id="new" style="background:#eee;color:#555">New</p>');
+    shadow.innerHTML = '<p id="shadow-new" style="color:#555">Changed shadow</p>';
+    engine.rescan();
+    card.dispatchEvent(new Event('focusin', {bubbles: true}));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(card.style.cssText).toBe(before);
+    expect(document.querySelector('#new')!.hasAttribute('data-semantic-dark-color')).toBe(false);
+    document.body.classList.remove('candidate');
+    engine.setMappingPaused(false);
+    await nextTask();
+    expect(card.style.cssText).toBe(before);
+    expect(document.querySelector('#new')!.hasAttribute('data-semantic-dark-color')).toBe(true);
+    expect(shadow.querySelector('#shadow-new')!.hasAttribute('data-semantic-dark-color')).toBe(true);
+  });
 
   it('finishes before-paint mapping across frames even when every frame runs out of budget', async () => {
     const engine = new DomThemeEngine(DEFAULT_THEME);

@@ -108,6 +108,8 @@ export class DomThemeEngine {
   private urgent: Element[] = [];
   private urgentIndex = 0;
   private enabled = false;
+  private mappingPaused = false;
+  private readonly deferredRoots = new Set<Element>();
   private lastInput = Number.NEGATIVE_INFINITY;
   private readonly onInput = (): void => {
     this.lastInput = performance.now();
@@ -138,6 +140,8 @@ export class DomThemeEngine {
 
   stop(): void {
     this.enabled = false;
+    this.mappingPaused = false;
+    this.deferredRoots.clear();
     for (const event of INPUT_EVENTS) window.removeEventListener(event, this.onInput, true);
     this.lastInput = Number.NEGATIVE_INFINITY;
     for (const observer of this.observers.values()) observer.disconnect();
@@ -154,6 +158,24 @@ export class DomThemeEngine {
     this.queued = new WeakSet<Element>();
     for (const element of this.touched) this.restoreElement(element);
     this.touched.clear();
+  }
+
+  // Keep existing paint while an official candidate temporarily changes source CSS.
+  setMappingPaused(paused: boolean): void {
+    if (this.mappingPaused === paused) return;
+    this.mappingPaused = paused;
+    if (!paused && this.enabled) {
+      // Discard candidate-era ordering; resample the restored source parent-first.
+      this.queue = [];
+      this.queued = new WeakSet<Element>();
+      this.urgent = [];
+      this.urgentIndex = 0;
+      this.deferredRoots.clear();
+      this.enqueue(document.documentElement);
+      for (const root of this.roots) {
+        if (root instanceof ShadowRoot) for (const child of root.children) this.enqueue(child);
+      }
+    }
   }
 
   rescan(): void {
@@ -209,7 +231,7 @@ export class DomThemeEngine {
       urgent?.push(element);
       current = walker.nextNode();
     }
-    if (this.idleHandle == null) this.idleHandle = scheduleIdle((deadline) => this.drain(deadline));
+    if (!this.mappingPaused && this.idleHandle == null) this.idleHandle = scheduleIdle((deadline) => this.drain(deadline));
   }
 
   private enqueueOne(element: Element): void {
@@ -223,6 +245,7 @@ export class DomThemeEngine {
   // than an idle period. The cursor only moves forward, so every frame makes
   // progress and the list empties.
   private drainUrgent(deadline: number): void {
+    if (this.mappingPaused) return;
     while (this.urgentIndex < this.urgent.length) {
       if (!this.enabled) return;
       if (performance.now() >= deadline) {
@@ -236,7 +259,11 @@ export class DomThemeEngine {
       this.urgentIndex += 1;
       if (!this.queued.has(element) || !element.isConnected) continue;
       // Already-mapped large containers keep their dark mapping until idle time.
-      if (element instanceof HTMLElement && this.touched.has(element) && hasLargeSubtree(element)) continue;
+      if (hasAncestorIn(element, this.deferredRoots)) continue;
+      if (element instanceof HTMLElement && this.touched.has(element) && hasLargeSubtree(element)) {
+        this.deferredRoots.add(element);
+        continue;
+      }
       this.queued.delete(element);
       this.processElement(element);
       if (element.shadowRoot) {
@@ -249,6 +276,7 @@ export class DomThemeEngine {
 
   private drain(deadline: IdleDeadlineLike): void {
     this.idleHandle = null;
+    if (this.mappingPaused) return;
     let processed = 0;
     const timeoutBudget = deadline.didTimeout ? 240 : 80;
     while (this.queue.length > 0 && (processed < timeoutBudget || deadline.timeRemaining() > 2)) {
@@ -286,6 +314,7 @@ export class DomThemeEngine {
     for (const element of elements) {
       if (shouldSkip(element)) continue;
       if (element.shadowRoot) this.registerRoot(element.shadowRoot);
+      this.deferredRoots.delete(element);
       if (element instanceof HTMLElement) batch.push(element);
     }
     const guarded = batch.filter(needsTransitionGuard);
@@ -302,7 +331,7 @@ export class DomThemeEngine {
   }
 
   private invalidateStates(elements: readonly HTMLElement[]): void {
-    if (!this.enabled) return;
+    if (!this.enabled || this.mappingPaused) return;
     const path = elements.filter((element) => element.isConnected)
       .slice(0, MAX_INTERACTION_ELEMENTS);
     const affected = new Set(path);
@@ -317,8 +346,11 @@ export class DomThemeEngine {
     const ordered = [...affected].sort((first, second) =>
       composedElementDepth(first) - composedElementDepth(second)
     );
-    for (const element of ordered) this.queued.delete(element);
-    for (const element of ordered) this.processElement(element);
+    for (const element of ordered) {
+      if (hasAncestorIn(element, this.deferredRoots) || this.deferredRoots.has(element)) continue;
+      this.queued.delete(element);
+      this.processElement(element);
+    }
   }
 
   private restoreElement(element: HTMLElement): void {
