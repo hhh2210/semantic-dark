@@ -1,5 +1,5 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {ImageThemeEngine} from '../../src/content/image-engine';
+import {ImageThemeEngine, hasSimpleImageBackdrop} from '../../src/content/image-engine';
 import {classifyVisualResource} from '../../src/vision';
 import type {AssetObservation} from '../../src/vision/action-policy';
 import {transformDiagramImage, type RasterImageTransform} from '../../src/content/raster-image';
@@ -183,4 +183,19 @@ describe('ImageThemeEngine action execution', () => {
       expect(image.hasAttribute('data-semantic-dark-image-filter')).toBe(false);
     } finally { engine.stop(); }
   });
+});
+
+
+it('does not treat opacity, filters or blending as a known solid image backdrop', () => {
+  document.body.innerHTML = '<article style="background:#333"><img></article>';
+  const image = document.querySelector('img')!;
+  expect(hasSimpleImageBackdrop(image)).toBe(true);
+  document.body.style.opacity = '0.5';
+  expect(hasSimpleImageBackdrop(image)).toBe(false);
+  document.body.style.opacity = '1';
+  image.style.filter = 'brightness(0.5)';
+  expect(hasSimpleImageBackdrop(image)).toBe(false);
+  image.style.filter = 'none';
+  image.parentElement!.style.mixBlendMode = 'multiply';
+  expect(hasSimpleImageBackdrop(image)).toBe(false);
 });

@@ -227,9 +227,7 @@ export class ImageThemeEngine {
       pixels, classification, canvasBackground: this.config.background,
       elementBackground: getComputedStyle(image).backgroundColor,
       parentBackground: image.parentElement ? getComputedStyle(image.parentElement).backgroundColor : '',
-      simpleBackdrop: getComputedStyle(image).backgroundImage === 'none' && !!image.parentElement &&
-        getComputedStyle(image.parentElement).backgroundImage === 'none' &&
-        parseCssColor(getComputedStyle(image.parentElement).backgroundColor)?.a === 1,
+      simpleBackdrop: classification.kind === 'icon' && hasSimpleImageBackdrop(image),
     };
   }
 
@@ -302,4 +300,17 @@ function restoreAttribute(element: Element, name: string, value: string | null):
 function imageIdentity(image: HTMLImageElement): string {
   return JSON.stringify([image.currentSrc, image.getAttribute('src'), image.getAttribute('srcset'),
     image.getAttribute('sizes'), image.naturalWidth, image.naturalHeight]);
+}
+
+/** Numeric stroke contrast is valid only without extra compositing in its ancestor chain. */
+export function hasSimpleImageBackdrop(image: HTMLImageElement): boolean {
+  if (!image.parentElement || parseCssColor(getComputedStyle(image.parentElement).backgroundColor)?.a !== 1) return false;
+  for (let element: Element | null = image; element; element = element.parentElement) {
+    const style = getComputedStyle(element);
+    if (Number(style.opacity || 1) !== 1 || (style.filter && style.filter !== 'none') ||
+        (style.backdropFilter && style.backdropFilter !== 'none') ||
+        (style.mixBlendMode && style.mixBlendMode !== 'normal')) return false;
+    if ((element === image || element === image.parentElement) && style.backgroundImage && style.backgroundImage !== 'none') return false;
+  }
+  return true;
 }
