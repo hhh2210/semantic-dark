@@ -19,8 +19,9 @@ relationships, raster diagrams, and ordinary images take separate paths.
   CSSOM or palette changes remap each element in place instead of first
   restoring its authored light colors.
 - CSS gradients keep their geometry and transparent gutters while solid color
-  stops are remapped. Text contrast is checked against the brightest resulting
-  stop, covering table headers and callouts that use light gradient bands.
+  stops are remapped. Text contrast is checked across the mapped luminance range, including inherited
+  and pseudo-element text. If no foreground can pass that range, a dark overlay
+  preserves gradient geometry while making the text readable.
 - Text contrast is constrained to at least 4.5:1; important non-text colors use
   a 3:1 floor. The matrix keeps colors recognizable; any necessary contrast
   correction adjusts OKLCH lightness rather than imposing a new role palette.
@@ -114,7 +115,8 @@ transparent artwork. The existing eligibility gate stays outside provider
 control. Providers select actions, not arbitrary CSS or RGB. Invalid responses,
 errors and the 500 ms deadline fall back to preserving the asset. Disable,
 resource replacement, detachment and changed sampled backgrounds invalidate
-late results, including worker output. Backplates leave image pixels untouched
+late results, including worker output. Stale observations are debounced and
+reobserved instead of leaving the asset permanently unprocessed. Backplates leave image pixels untouched
 and restore by removing the extension's marker.
 
 No model weights, remote calls, decision cache, or trained-provider activation

@@ -1,10 +1,14 @@
 import {build} from 'esbuild';
-import {cp, mkdir, rm} from 'node:fs/promises';
+import {cp, mkdir, rm, readFile} from 'node:fs/promises';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = resolve(root, 'dist');
+
+const packageInfo = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
+const manifest = JSON.parse(await readFile(resolve(root, 'extension/manifest.json'), 'utf8'));
+if (manifest.version !== packageInfo.version) throw new Error('Package and extension versions must match');
 
 await rm(dist, {recursive: true, force: true});
 await mkdir(dist, {recursive: true});

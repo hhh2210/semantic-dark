@@ -1,4 +1,6 @@
-import {mapColor, mapCssGradient, parseCssColor} from '../color/index';
+import {mapColor, mapCssGradient, parseCssColor, formatRgba8CssColor} from '../color/index';
+import {darkenGradientForText, type GradientMapResult} from '../color/gradient';
+import {textColorForBackdrops} from '../color/text-contrast';
 import type {ThemeConfig} from '../types';
 import {ACTIVE_ATTRIBUTE, DOM_ATTRIBUTE as ATTR, DOM_VARIABLE as VAR} from './dom-style-contract';
 
@@ -22,6 +24,7 @@ const SIDES = ['top', 'right', 'bottom', 'left'] as const;
 // Authored backgrounds recorded when an element was last mapped. Remapping
 // happens in place, so while an override is in effect this is the only way to
 // read the authored value; it can be stale until the element is remapped.
+const mappedBackdrops = new WeakMap<Element, readonly string[]>();
 const authoredBackgrounds = new WeakMap<Element, string>();
 
 export function authoredBackgroundColor(element: Element): string {
@@ -98,6 +101,41 @@ function mappedBackground(element: HTMLElement | null, fallback: string): string
   return fallback;
 }
 
+function inheritedBackdrops(element: HTMLElement | null, fallback: string): readonly string[] {
+  for (let current = element; current; current = current.parentElement) {
+    const known = mappedBackdrops.get(current);
+    if (known) return known;
+  }
+  return [fallback];
+}
+
+function hasMappedTextAncestor(element: HTMLElement): boolean {
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    if (parent.hasAttribute(ATTR.color)) return true;
+  }
+  return false;
+}
+
+function normalizedColor(value: string): string {
+  const parsed = parseCssColor(value);
+  return parsed ? formatRgba8CssColor(parsed) : value;
+}
+
+function readableText(color: string, alreadyMapped: boolean, backdrops: readonly string[],
+  gradient: GradientMapResult | null, config: ThemeConfig) {
+  const mapped = alreadyMapped ? color : mapColor(color, {role: 'text', minContrast: 1});
+  const foreground = parseCssColor(mapped);
+  if (!foreground) return {color: mapped, gradient};
+  const solve = (values: readonly string[]) => textColorForBackdrops(foreground,
+    values.map(value => parseCssColor(value)!).filter(Boolean), config.minimumTextContrast);
+  let repaired = solve(backdrops);
+  if (!repaired && gradient) {
+    gradient = darkenGradientForText(gradient, config.minimumTextContrast);
+    repaired = solve(gradient.readabilityBackgrounds);
+  }
+  return {color: formatRgba8CssColor(repaired ?? foreground), gradient};
+}
+
 function mapBorder(
   element: HTMLElement,
   style: PaintSnapshot,
@@ -138,7 +176,7 @@ function mapPseudo(
   const background = isTransparent(style.backgroundColor)
     ? mappedBackground(element, config.background)
     : mapColor(style.backgroundColor, {role: 'surface', background: config.background});
-  const gradient = mapCssGradient(style.backgroundImage, config.background);
+  let gradient = mapCssGradient(style.backgroundImage, background);
   let touched = false;
 
   if (!isTransparent(style.backgroundColor)) {
@@ -152,17 +190,22 @@ function mapPseudo(
     touched = true;
   }
 
-  const readabilityBackground = gradient?.readabilityBackground ?? background;
   const inheritsMappedHostColor = hostColorIsMapped && style.color === hostColor &&
     getComputedStyle(element, `::${kind}`).color === getComputedStyle(element).color;
-  if (pseudoHasText(style.content) && !inheritsMappedHostColor && !isTransparent(style.color)) {
-    element.style.setProperty(VAR[`${prefix}Color`], mapColor(style.color, {
-      role: 'text', background: readabilityBackground,
-      minContrast: config.minimumTextContrast, preserveHue: true,
-    }));
-    element.setAttribute(ATTR[`${prefix}Color`], '');
-    touched = true;
+  if (pseudoHasText(style.content) && !isTransparent(style.color)) {
+    const foreground = inheritsMappedHostColor ? getComputedStyle(element).color : style.color;
+    const backdrops = gradient?.readabilityBackgrounds ?? (isTransparent(style.backgroundColor)
+      ? inheritedBackdrops(element, background) : [background]);
+    const readable = readableText(foreground, inheritsMappedHostColor, backdrops, gradient, config);
+    if (!inheritsMappedHostColor || readable.color !== normalizedColor(foreground)) {
+      element.style.setProperty(VAR[`${prefix}Color`], readable.color);
+      element.setAttribute(ATTR[`${prefix}Color`], '');
+      touched = true;
+    }
+    gradient = readable.gradient;
+    if (gradient) element.style.setProperty(VAR[`${prefix}BackgroundImage`], gradient.css);
   }
+  const readabilityBackground = gradient?.readabilityBackground ?? background;
 
   const borderVariables = Object.fromEntries(SIDES.map((side) => [
     side,
@@ -189,7 +232,7 @@ export function mapElementStyles(element: HTMLElement, config: ThemeConfig): boo
     : canvasElement
       ? config.background
       : mapColor(style.backgroundColor, {role: 'surface', background: config.background});
-  const gradient = mapCssGradient(style.backgroundImage, config.background);
+  let gradient = mapCssGradient(style.backgroundImage, background);
   let touched = false;
 
   if (!isTransparent(style.backgroundColor)) {
@@ -204,21 +247,28 @@ export function mapElementStyles(element: HTMLElement, config: ThemeConfig): boo
     touched = true;
   }
 
-  const readabilityBackground = gradient?.readabilityBackground ?? background;
-  const parentColor = element.parentElement?.hasAttribute(ATTR.color)
-    ? getComputedStyle(element.parentElement).color
-    : null;
+  const parentColor = element.parentElement && hasMappedTextAncestor(element)
+    ? getComputedStyle(element.parentElement).color : null;
   const inheritsMappedColor = parentColor != null && parentColor === style.color;
-  const mapsOwnColor = ownsRenderedText(element) &&
-    !inheritsMappedColor && !isTransparent(style.color);
-  if (mapsOwnColor) {
-    element.style.setProperty(VAR.color, mapColor(style.color, {
-      role: 'text', background: readabilityBackground,
-      minContrast: config.minimumTextContrast, preserveHue: true,
-    }));
-    element.setAttribute(ATTR.color, '');
-    touched = true;
+  let mapsOwnColor = false;
+  let backdrops = gradient?.readabilityBackgrounds ?? (isTransparent(style.backgroundColor)
+    ? inheritedBackdrops(element.parentElement, background) : [background]);
+  if (ownsRenderedText(element) && !isTransparent(style.color)) {
+    const readable = readableText(style.color, inheritsMappedColor, backdrops, gradient, config);
+    mapsOwnColor = !inheritsMappedColor || readable.color !== normalizedColor(style.color);
+    if (mapsOwnColor) {
+      element.style.setProperty(VAR.color, readable.color);
+      element.setAttribute(ATTR.color, '');
+      touched = true;
+    }
+    gradient = readable.gradient;
+    if (gradient) {
+      element.style.setProperty(VAR.backgroundImage, gradient.css);
+      backdrops = gradient.readabilityBackgrounds;
+    }
   }
+  mappedBackdrops.set(element, backdrops);
+  const readabilityBackground = gradient?.readabilityBackground ?? background;
 
   touched = mapBorder(element, style, ATTR.border, {
     top: VAR.borderTop,
@@ -250,6 +300,7 @@ export function mapElementStyles(element: HTMLElement, config: ThemeConfig): boo
 
 export function restoreElementStyles(element: HTMLElement): void {
   authoredBackgrounds.delete(element);
+  mappedBackdrops.delete(element);
   for (const attribute of Object.values(ATTR)) element.removeAttribute(attribute);
   for (const variable of Object.values(VAR)) element.style.removeProperty(variable);
 }

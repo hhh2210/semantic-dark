@@ -50,10 +50,11 @@ export async function decideAsset(
   const fallback = (reason: string): AssetDecision => ({action: 'keep', authority: 'fallback', reason});
   if (signal.aborted) return fallback('cancelled');
   if (!provider) return heuristicAssetDecision(observation.classification);
-  const allowed = allowedAssetActions(observation.classification);
+  const allowed = Object.freeze([...allowedAssetActions(observation.classification)]);
   if (allowed.length === 1) return fallback('ineligible');
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return fallback('invalid-deadline');
 
+  const deadline = performance.now() + timeoutMs;
   const request = new AbortController();
   let cancel!: () => void;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -65,10 +66,10 @@ export async function decideAsset(
   });
   try {
     const answer = await Promise.race([
-      Promise.resolve().then(() => provider.decide(observation, allowed, request.signal)), stopped,
+      Promise.resolve().then(() => request.signal.aborted ? undefined : provider.decide(observation, allowed, request.signal)), stopped,
     ]);
     if (signal.aborted) return fallback('cancelled');
-    if (deadlineExpired) return fallback('timeout');
+    if (deadlineExpired || performance.now() >= deadline) return fallback('timeout');
     if (!answer || typeof answer !== 'object' || !('action' in answer) ||
         !allowed.includes(answer.action as AssetAction)) return fallback('invalid-or-disallowed-action');
     return {action: answer.action as AssetAction, authority: 'provider', reason: 'selected-allowed-action'};

@@ -28,6 +28,7 @@ import {
   waitForPrepaintExclusion,
   waitForPrepaintReleased,
 } from '../src/testing/e2e/prepaint.mjs';
+import {verifyMatrixContrast} from '../src/testing/e2e/matrix-contrast.mjs';
 import {exerciseDynamicClickEffects} from '../src/testing/e2e/dynamic-effects.mjs';
 import {verifyRgba8Quantization} from '../src/testing/e2e/rgba8-quantization.mjs';
 import {
@@ -123,6 +124,7 @@ async function main() {
     const prepaintCascade = await verifyPrepaintCascade(session.page);
     const transformed = await readPageState(session.page);
     const initialMetrics = verifyTransformedState(transformed);
+    const matrixContrast = await verifyMatrixContrast(session.page);
     const interactionMetrics = await exerciseInteractiveDomEffects(session.page, CONFIG.timeout);
     const dynamicClickMetrics = await exerciseDynamicClickEffects(session.page, CONFIG.timeout);
 
@@ -362,6 +364,7 @@ async function main() {
       popup: {light: popupLight, dark: popupDark},
       metrics: {initial: initialMetrics, reprocessed: reprocessedMetrics},
       interactionMetrics,
+      matrixContrast,
       dynamicClickMetrics,
       rasterTimingsMs: {
         initial: {

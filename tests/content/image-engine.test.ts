@@ -9,6 +9,7 @@ import {DEFAULT_THEME} from '../../src/types';
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  document.documentElement.removeAttribute('data-semantic-dark-active');
   document.documentElement.innerHTML = '<head></head><body></body>';
 });
 
@@ -46,6 +47,7 @@ describe('ImageThemeEngine cancellation', () => {
 
 describe('ImageThemeEngine action execution', () => {
   function fixture(transparentIcon = false, useProvider = true) {
+    document.documentElement.setAttribute('data-semantic-dark-active', '');
     vi.stubGlobal('chrome', {runtime: {getURL: (path: string) => `chrome-extension://fixture/${path}`}});
     const image = document.createElement('img');
     image.src = '/original.png';
@@ -72,7 +74,10 @@ describe('ImageThemeEngine action execution', () => {
     if (!useProvider) { observation.classification.kind = 'diagram'; observation.classification.policy = 'diagram'; }
     const engine = new ImageThemeEngine(DEFAULT_THEME, useProvider ? provider : undefined);
     vi.spyOn(engine as unknown as {observe(image: HTMLImageElement): AssetObservation}, 'observe')
-      .mockReturnValue(observation);
+      .mockImplementation(current => ({...observation, source: current.currentSrc || current.src,
+        elementBackground: getComputedStyle(current).backgroundColor,
+        parentBackground: current.parentElement ? getComputedStyle(current.parentElement).backgroundColor : '',
+      }));
     engine.start();
     return {image, engine, provider, answer};
   }
@@ -130,6 +135,24 @@ describe('ImageThemeEngine action execution', () => {
     } finally { engine.stop(); }
     expect(image.getAttribute('src')).toBe(original);
     expect(revoke).toHaveBeenCalledWith('blob:diagram-fixture');
+  });
+
+  it('reobserves the newest source after discarding an in-flight stale result', async () => {
+    const {image, engine, provider, answer} = fixture();
+    let fresh!: (value: unknown) => void;
+    provider.decide.mockImplementationOnce(() => new Promise(resolve => { fresh = resolve; }));
+    try {
+      // The first request was queued before changing the provider mock; finish it,
+      // then let the debounced retry create the new observation.
+      await vi.waitFor(() => expect(provider.decide).toHaveBeenCalledOnce());
+      image.src = '/new-source.png';
+      fresh({action: 'dim'});
+      await vi.waitFor(() => expect(provider.decide).toHaveBeenCalledTimes(2));
+      expect(image.hasAttribute('data-semantic-dark-image-filter')).toBe(false);
+      expect(provider.decide).toHaveBeenLastCalledWith(expect.objectContaining({source: image.src}), expect.any(Array), expect.any(AbortSignal));
+      answer({action: 'keep'});
+      await vi.waitFor(() => expect(image.getAttribute('data-semantic-dark-image-action')).toBe('provider:keep'));
+    } finally { engine.stop(); }
   });
 
   it.each(['source', 'background', 'disabled', 'detached'])('discards a late action when %s changes', async change => {

@@ -22,7 +22,7 @@ const STYLE_ID = 'semantic-dark-image-sheet';
 const IMAGE_STYLE = `
 img[${FILTER_ATTRIBUTE}="dim"] { filter: brightness(.82) contrast(1.04) !important; }
 img[${FILTER_ATTRIBUTE}="recolor"] { filter: brightness(0) invert(.92) !important; }
-img[${FILTER_ATTRIBUTE}="backplate"] { background-color: white !important; }
+:root[data-semantic-dark-active] img[${FILTER_ATTRIBUTE}="backplate"]:not([data-semantic-dark-updating]) { background-color: white !important; }
 `;
 
 function ensureStyle(): void {
@@ -47,6 +47,7 @@ export class ImageThemeEngine {
   private readonly rasterWorker = new RasterWorkerClient();
   private rasterAbort = new AbortController();
   private generation = 0;
+  private readonly retryTimers = new Map<HTMLImageElement, ReturnType<typeof setTimeout>>();
   private intersection: IntersectionObserver | null = null;
   private mutations: MutationObserver | null = null;
 
@@ -95,6 +96,8 @@ export class ImageThemeEngine {
   stop(): void {
     this.generation += 1;
     this.rasterAbort.abort();
+    for (const timer of this.retryTimers.values()) clearTimeout(timer);
+    this.retryTimers.clear();
     this.rasterWorker.stop();
     this.intersection?.disconnect();
     this.intersection = null;
@@ -150,12 +153,22 @@ export class ImageThemeEngine {
         // not on transient pre-paint colors. Only a contextual provider consumes these.
         (!this.decisionProvider || (getComputedStyle(image).backgroundColor === observation.elementBackground &&
         (image.parentElement ? getComputedStyle(image.parentElement).backgroundColor : '') === observation.parentBackground));
-      if (!current()) return;
+      if (!current()) { this.retryStaleImage(image, generation); return; }
       this.apply(image, observation.classification, decision);
-      if (decision.action === 'diagram') await this.applyRasterDiagram(image, current);
+      if (decision.action === 'diagram') await this.applyRasterDiagram(image, current, generation);
     } catch {
       // Cross-origin/tainted and undecodable resources are intentionally kept.
     }
+  }
+
+  private retryStaleImage(image: HTMLImageElement, generation: number): void {
+    if (!this.config.enabled || generation !== this.generation || !image.isConnected || this.retryTimers.has(image)) return;
+    this.retryTimers.set(image, setTimeout(() => {
+      this.retryTimers.delete(image);
+      if (!this.config.enabled || generation !== this.generation || !image.isConnected) return;
+      this.processed.delete(image);
+      this.queue(image);
+    }, 100));
   }
 
   private observe(image: HTMLImageElement): AssetObservation {
@@ -197,7 +210,7 @@ export class ImageThemeEngine {
     // rewriting, not the whole-image filter that caused the original problem.
   }
 
-  private async applyRasterDiagram(image: HTMLImageElement, isCurrent: () => boolean): Promise<void> {
+  private async applyRasterDiagram(image: HTMLImageElement, isCurrent: () => boolean, generation: number): Promise<void> {
     const signal = this.rasterAbort.signal;
     const transformed = await transformDiagramImage(
       image,
@@ -205,7 +218,8 @@ export class ImageThemeEngine {
       this.rasterWorker,
       signal,
     );
-    if (signal.aborted || !isCurrent()) return;
+    if (signal.aborted) return;
+    if (!isCurrent()) { this.retryStaleImage(image, generation); return; }
     if (!transformed) {
       image.setAttribute(RASTER_ATTRIBUTE, 'abstained:pixel-budget');
       return;

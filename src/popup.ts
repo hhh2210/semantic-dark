@@ -6,6 +6,8 @@ import {
   type ThemeMode,
 } from './types';
 
+required<HTMLElement>('#version').textContent = `v${chrome.runtime.getManifest().version}`;
+
 const popup = required<HTMLElement>('#popup');
 const hostLabel = required<HTMLElement>('#host');
 const badge = required<HTMLElement>('#site-state');

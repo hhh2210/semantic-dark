@@ -86,6 +86,10 @@ export async function readPageState(page) {
 }
 
 export async function waitForProcessedState(page, timeout = 15_000) {
+  // New contrast fixtures push the lazy diagram below the initial viewport.
+  await page.locator('#vision-diagram').scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => document.querySelector('#vision-diagram')?.hasAttribute('data-semantic-dark-raster-status'), undefined, {timeout});
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForFunction(() => {
     const svg = document.querySelector('#semantic-halo-figure');
     const card = document.querySelector('#dom-card');

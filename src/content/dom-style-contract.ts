@@ -156,7 +156,8 @@ function animatesChanges(style: CSSStyleDeclaration): boolean {
 // The transition guard costs two forced style recalcs. Only elements whose box
 // or generated content can actually animate a color change need it.
 export function needsTransitionGuard(element: HTMLElement): boolean {
-  return animatesChanges(getComputedStyle(element)) ||
+  return element.getAttribute('data-semantic-dark-image-filter') === 'backplate' ||
+    animatesChanges(getComputedStyle(element)) ||
     animatesChanges(getComputedStyle(element, '::before')) ||
     animatesChanges(getComputedStyle(element, '::after'));
 }

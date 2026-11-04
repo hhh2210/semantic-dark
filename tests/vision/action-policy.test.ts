@@ -8,7 +8,7 @@ function observation(): AssetObservation {
     classification: {...classifyVisualResource(pixels), kind: 'diagram', policy: 'diagram', confidence: 0.9},
     canvasBackground: '#111416', elementBackground: 'transparent', parentBackground: '#333'};
 }
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('asset action decision boundary', () => {
   it('keeps the current router as the default and explicitly identifies its authority', async () => {
@@ -45,6 +45,24 @@ describe('asset action decision boundary', () => {
     const provider = {decide: vi.fn()};
     expect(await decideAsset(input, provider, new AbortController().signal)).toMatchObject({action: 'keep'});
     expect(provider.decide).not.toHaveBeenCalled();
+  });
+
+  it('does not let the provider mutate its action allowlist', async () => {
+    const input = observation(); input.classification.kind = 'photo';
+    const result = await decideAsset(input, {decide: async (_input, allowed) => {
+      try { (allowed as string[]).push('diagram'); } catch { /* frozen */ }
+      return {action: 'diagram'};
+    }}, new AbortController().signal);
+    expect(result).toMatchObject({action: 'keep', authority: 'fallback'});
+  });
+
+  it('rejects a result past the monotonic deadline even before the timer can fire', async () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(0);
+    const result = await decideAsset(observation(), {decide: async () => {
+      now.mockReturnValue(501);
+      return {action: 'diagram'};
+    }}, new AbortController().signal, 500);
+    expect(result).toMatchObject({action: 'keep', reason: 'timeout'});
   });
 
   it('bounds a hung provider and aborts its request', async () => {
