@@ -2,7 +2,6 @@ import {describe, expect, it} from 'vitest';
 
 import {
   contrastRatio,
-  hueDistanceDegrees,
   MINIMUM_SURFACE_SEPARATION,
   mapColor,
   mapRoleColor,
@@ -11,6 +10,7 @@ import {
   srgb,
   srgbToOklch,
 } from '../../src/color/index';
+import {invertLightness} from '../../src/color/invert-lightness';
 import type {SvgColorTransformer} from '../../src/svg/types';
 
 function random(seed = 0xd4a4b10c): () => number {
@@ -22,16 +22,13 @@ function random(seed = 0xd4a4b10c): () => number {
 }
 
 describe('semantic dark role mapping', () => {
-  it('keeps background and surface roles inside their dark lightness bands', () => {
+  it('uses the matrix across roles instead of compressing colors into role bands', () => {
     const next = random();
     for (let sample = 0; sample < 400; sample += 1) {
       const source = srgb(next(), next(), next());
-      const background = srgbToOklch(mapRoleColor(source, {role: 'background'}));
-      const surface = srgbToOklch(mapRoleColor(source, {role: 'surface'}));
-      expect(background.l).toBeGreaterThanOrEqual(0.08 - 2e-6);
-      expect(background.l).toBeLessThanOrEqual(0.22 + 2e-6);
-      expect(surface.l).toBeGreaterThanOrEqual(0.24 - 2e-6);
-      expect(surface.l).toBeLessThanOrEqual(0.4 + 2e-6);
+      for (const role of ['background', 'surface', 'text', 'accent', 'svgFill'] as const) {
+        expect(mapRoleColor(source, {role, minContrast: 1})).toEqual(invertLightness(source));
+      }
     }
   });
 
@@ -65,18 +62,14 @@ describe('semantic dark role mapping', () => {
     }
   });
 
-  it('preserves hue whenever the mapped color retains meaningful chroma', () => {
-    const next = random(0x0c11c0de);
-    for (let sample = 0; sample < 300; sample += 1) {
-      const source = srgb(next(), next(), next());
-      const mapped = mapRoleColor(source, {role: 'accent'});
-      const sourceLch = srgbToOklch(source);
-      const mappedLch = srgbToOklch(mapped);
-      if (sourceLch.c > 1e-4 && mappedLch.c > 1e-4) {
-        expect(hueDistanceDegrees(sourceLch.h, mappedLch.h)).toBeLessThan(0.003);
-      }
-      expect(mappedLch.c).toBeLessThanOrEqual(sourceLch.c + 2e-6);
-    }
+  it('repairs a matrix-mapped red button without replacing its background palette', () => {
+    const background = mapRoleColor(parseCssColor('#c62828')!, {role: 'surface'});
+    const uncorrected = invertLightness(parseCssColor('#fff')!);
+    expect(contrastRatio(uncorrected, background)).toBeLessThan(4.5);
+    const report = mapRoleColorWithReport(parseCssColor('#fff')!, {role: 'text', against: background});
+    expect(report.adjustedForContrast).toBe(true);
+    expect(report.achievedContrast).toBeGreaterThanOrEqual(4.5);
+    expect(background).toEqual(invertLightness(parseCssColor('#c62828')!));
   });
 
   it('exposes achieved constraints in the detailed report', () => {

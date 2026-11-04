@@ -2,11 +2,10 @@ import {describe, expect, it} from 'vitest';
 
 import {
     contrastRatio,
-    hueDistanceDegrees,
     relativeLuminance,
     srgb,
-    srgbToOklch,
 } from '../../src/color';
+import {invertLightness} from '../../src/color/invert-lightness';
 import {recolorRasterDiagram} from '../../src/raster';
 
 import {createImage, rgbaAt, srgbAt, syntheticChart} from './helpers';
@@ -14,7 +13,7 @@ import {createImage, rgbaAt, srgbAt, syntheticChart} from './helpers';
 const DARK = srgb(18 / 255, 18 / 255, 18 / 255);
 
 describe('recolorRasterDiagram', () => {
-    it('recolors a chart by semantic role without inverting accent hue', () => {
+    it('recolors chart accents with the WebKit matrix while retaining its background and text constraints', () => {
         const image = syntheticChart();
         const original = new Uint8ClampedArray(image.data);
 
@@ -39,9 +38,10 @@ describe('recolorRasterDiagram', () => {
 
         const sourceAccent = srgbAt(image.data, image.width, 20, 20);
         const mappedAccent = srgbAt(result.data, image.width, 20, 20);
-        const sourceHue = srgbToOklch(sourceAccent).h;
-        const mappedHue = srgbToOklch(mappedAccent).h;
-        expect(hueDistanceDegrees(sourceHue, mappedHue)).toBeLessThan(2);
+        const expectedAccent = invertLightness(sourceAccent);
+        for (const channel of ['r', 'g', 'b'] as const) {
+            expect(Math.abs(mappedAccent[channel] - expectedAccent[channel])).toBeLessThanOrEqual(1 / 255);
+        }
     });
 
     it('maps an opaque antialiased ramp continuously instead of palette banding', () => {

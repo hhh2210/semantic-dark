@@ -6,8 +6,10 @@ relationships, raster diagrams, and ordinary images take separate paths.
 
 ## What works now
 
-- HTML backgrounds, surfaces, text, borders, decoration, and caret colors are
-  mapped in OKLCH through reversible extension-owned CSS variables.
+- HTML backgrounds, surfaces, text, borders, decoration, and caret colors use
+  WebKit's public `apple-invert-lightness()` color transform through reversible
+  extension-owned CSS variables. An HSL half-turn followed by the fixed sRGB
+  matrix replaces the old role-specific lightness bands.
 - Generated `::before`/`::after` surfaces, gradients, text, and borders use the
   same semantic mapping. Common path-local pointer and keyboard-focus state
   changes are re-sampled before their first rendered frame.
@@ -20,7 +22,8 @@ relationships, raster diagrams, and ordinary images take separate paths.
   stops are remapped. Text contrast is checked against the brightest resulting
   stop, covering table headers and callouts that use light gradient bands.
 - Text contrast is constrained to at least 4.5:1; important non-text colors use
-  a 3:1 floor. Hue and chroma are retained where the target gamut permits it.
+  a 3:1 floor. The matrix keeps colors recognizable; any necessary contrast
+  correction adjusts OKLCH lightness rather than imposing a new role palette.
 - Mapped surfaces keep at least a subtle 1.12:1 separation from the configured
   canvas, and their authored lightness order remains monotonic. This preserves
   card, table-band, and callout hierarchy without turning every region gray.
@@ -34,7 +37,8 @@ relationships, raster diagrams, and ordinary images take separate paths.
   from bounded pixel statistics, then refined with local `alt`, title, role, and
   URL evidence. Unknown is a rejection state, not a fifth content class.
 - High-confidence diagrams use an OKLab palette/region transform rather than a
-  frame-wide invert. It preserves alpha and accent hue, enforces contrast, and
+  frame-wide invert. Palette colors use the shared WebKit transform; it preserves
+  alpha, enforces contrast, and
   abstains when the pixel/background analysis is unsafe.
 - Diagram computation runs in a dedicated worker behind an extension-origin
   host iframe. This keeps synchronous main-thread work below 1 ms in the E2E
@@ -95,6 +99,30 @@ switch when one exists, audits popup target sizes in
 light and dark appearances, measures raster-worker timing, toggles the site
 through the real popup, and writes screenshots to `artifacts/`.
 
+## Asset decision interface
+
+`ImageThemeEngine` separates observation, action selection and execution. The
+shipped default is still the deterministic feature router. An optional local
+`AssetDecisionProvider` receives bounded source RGBA (long edge at most 128 px),
+classification features, source identity, configured canvas and observed element /
+parent background colors. Those background samples are not a full compositor
+backdrop reconstruction.
+
+The versioned action contract supports `keep`, `dim`, `monochrome`, `diagram`
+(the Apple-mapped palette executor), and a white `backplate` for eligible
+transparent artwork. The existing eligibility gate stays outside provider
+control. Providers select actions, not arbitrary CSS or RGB. Invalid responses,
+errors and the 500 ms deadline fall back to preserving the asset. Disable,
+resource replacement, detachment and changed sampled backgrounds invalidate
+late results, including worker output. Backplates leave image pixels untouched
+and restore by removing the extension's marker.
+
+No model weights, remote calls, decision cache, or trained-provider activation
+are included. The provider path is tested with controlled responders; this is
+an integration contract, not evidence of learned-policy quality. Existing
+classifier eligibility is heuristic, not calibrated safety. Action labels must
+be recollected against the matrix-enabled runtime before training / evaluation.
+
 ## ML status
 
 The installed extension uses a deterministic visual-feature router with an
@@ -111,6 +139,9 @@ features for known-class routing; it slightly beat the CNN hybrid without an
 ONNX runtime. It remains offline until a genuinely cross-site corpus verifies
 the result. See [BENCHMARK.md](BENCHMARK.md) for exact numbers and limitations;
 see [ml/README.md](ml/README.md) for CNN reproduction.
+
+Historical paired-theme evaluation retains the frozen pre-matrix role mapper;
+those reports do not describe the current matrix-based runtime.
 
 The model, if eventually adopted, will only choose a routing policy. Final
 colors remain governed by the deterministic contrast and palette solvers.
@@ -141,4 +172,7 @@ testbed and the evidence required before any device model can affect rendering.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE), with the WebKit-derived color transform under its retained
+BSD-style notice in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt). That notice
+is also included in `dist/`. This uses the public legacy transform, not the
+private Safari 27.3 Adaptive Dark Mode controller.

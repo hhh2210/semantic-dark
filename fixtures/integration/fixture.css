@@ -219,3 +219,11 @@ a {
 #benchmark-hover-row:hover {
   background: #f8f8f8;
 }
+
+.matrix-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.matrix-grid > * { padding: 16px; border: 0; border-radius: 8px; font: inherit; }
+#matrix-white { background: #fff; color: #666; }
+#matrix-gray { background: #ddd; color: #222; }
+#matrix-deep-gray { background: #ccc; color: #222; }
+#matrix-red { background: #c62828; color: #fff; }
+#matrix-blue { background: #0066cc; color: #fff; }

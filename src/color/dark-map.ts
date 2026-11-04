@@ -6,6 +6,7 @@ import {
   rgba8ContrastRatios,
 } from './contrast';
 import {formatRgba8CssColor, parseCssColor} from './css';
+import {invertLightness} from './invert-lightness';
 import {gamutMapOklch, srgbToOklch} from './oklab';
 import {
   validateRoleProfiles,
@@ -70,12 +71,21 @@ const ROLE_PROFILES: RoleProfiles = validateRoleProfiles({
   svgStroke: {minimumLightness: 0.58, lightnessSpan: 0.3, chromaScale: 1},
 });
 
-/** Map a parsed sRGB color into the dark palette with role-specific constraints. */
+/** Apply WebKit's lightness inversion, then enforce role-specific contrast. */
 export function mapRoleColor(color: SrgbColor, options: RoleMapOptions): SrgbColor {
   return mapRoleColorWithReport(color, options).color;
 }
 
 export function mapRoleColorWithReport(
+  color: SrgbColor,
+  options: RoleMapOptions,
+): RoleMapResult {
+  const role = normalizeRole(options.role, options.property);
+  return constrainMappedColor(invertLightness(color), role, options);
+}
+
+/** Frozen pre-matrix baseline for historical paired-theme experiments only. */
+export function mapLegacyRoleColorWithReport(
   color: SrgbColor,
   options: RoleMapOptions,
 ): RoleMapResult {
@@ -104,6 +114,14 @@ function mapRoleColorUsingProfiles(
   const source = srgbToOklch(clipSrgb(color));
   const profile = profiles[role];
   const mapped = gamutMapOklch(mapIntoRole(source, profile, options.preserveHue !== false));
+  return constrainMappedColor(mapped, role, options);
+}
+
+function constrainMappedColor(
+  mapped: SrgbColor,
+  role: ColorRole,
+  options: RoleMapOptions,
+): RoleMapResult {
   const against = clipSrgb(options.against ?? DEFAULT_DARK_BACKGROUND);
   const minimumContrast = requiredContrast(role, options);
 

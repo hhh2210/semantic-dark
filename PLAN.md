@@ -1,5 +1,9 @@
 # Semantic Dark development plan
 
+> Historical paired-theme research plan. As of 2026-11-04 the runtime uses
+> WebKit lightness inversion plus contrast correction; frozen evaluation keeps
+> the earlier role-profile mapper. See README.md for current behavior.
+
 This document explains why the project exists, why neither more hard-coded
 rules nor a large screenshot corpus is the immediate answer, and what evidence
 is required before a device-side model is allowed to affect rendering.

@@ -38,4 +38,6 @@ for (const file of [
 }
 await cp(resolve(root, 'extension', 'icons'), resolve(dist, 'icons'), {recursive: true});
 
+await cp(resolve(root, 'THIRD_PARTY_NOTICES.txt'), resolve(dist, 'THIRD_PARTY_NOTICES.txt'));
+
 console.log(`Built unpacked extension at ${dist}`);
