@@ -30,6 +30,8 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResp
   if (message.type === 'semantic-dark:set-config') {
     const config = normalizeThemeConfig(message.config);
     chrome.storage.local.set({[keyFor(message.host)]: config}).then(async () => {
+      // The save acknowledgment is the boundary after which navigation is safe.
+      await syncPrepaint();
       const tabs = await chrome.tabs.query({});
       await Promise.allSettled(tabs.map((tab) => tab.id == null ? Promise.resolve() :
         chrome.tabs.sendMessage(tab.id, {type: 'semantic-dark:config-changed', host: message.host, config})
