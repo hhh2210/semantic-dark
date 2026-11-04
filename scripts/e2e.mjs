@@ -20,6 +20,7 @@ import {
 import {contrastRatio, parseRgb, relativeLuminance} from '../src/testing/e2e/colors.mjs';
 import {exerciseOfficialTheme} from '../src/testing/e2e/official-theme.mjs';
 import {exerciseInteractiveDomEffects} from '../src/testing/e2e/dom-effects.mjs';
+import {exerciseDynamicClickEffects} from '../src/testing/e2e/dynamic-effects.mjs';
 import {verifyRgba8Quantization} from '../src/testing/e2e/rgba8-quantization.mjs';
 import {
   captureBaseline,
@@ -105,6 +106,7 @@ async function main() {
     const transformed = await readPageState(session.page);
     const initialMetrics = verifyTransformedState(transformed);
     const interactionMetrics = await exerciseInteractiveDomEffects(session.page, CONFIG.timeout);
+    const dynamicClickMetrics = await exerciseDynamicClickEffects(session.page, CONFIG.timeout);
 
     const expectedHost = new URL(fixture.url).host;
     await session.page.emulateMedia({colorScheme: 'light'});
@@ -325,6 +327,7 @@ async function main() {
       popup: {light: popupLight, dark: popupDark},
       metrics: {initial: initialMetrics, reprocessed: reprocessedMetrics},
       interactionMetrics,
+      dynamicClickMetrics,
       rasterTimingsMs: {
         initial: {
           wall: initialMetrics.rasterMs,

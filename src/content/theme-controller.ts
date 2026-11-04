@@ -5,16 +5,20 @@ import {
   type ThemeConfig,
 } from '../types';
 import type {NativeThemeDecision, NativeThemeDetectorLike} from './native-dark';
-import {beginDocumentTransitionGuard, endDocumentTransitionGuard, flushDocumentStyle}
-  from './dom-style-contract';
+import {
+  ACTIVE_ATTRIBUTE,
+  beginDocumentTransitionGuard,
+  endDocumentTransitionGuard,
+  flushDocumentStyle,
+} from './dom-style-contract';
 import {OfficialThemeLane, officialThemeLooksApplied, type OfficialThemeLaneLike} from './official-theme';
 import {officialThemeCandidates, officialThemeRecipeKeys} from './official-theme-recipes';
-const ACTIVE_ATTRIBUTE = 'data-semantic-dark-active';
 const MAX_OFFICIAL_ATTEMPTS = 2;
 
 export interface ThemeEngineLike {
   update(config: ThemeConfig): void;
   rescan?(): void;
+  setMappingPaused?(paused: boolean): void;
 }
 
 export interface ThemeEngineSet {
@@ -99,7 +103,9 @@ export class ThemeController {
   }
 
   rescan(): void {
-    if (!this.active) return;
+    // A pending official candidate would be sampled into the mapping; its
+    // rollback rescans the restored page instead.
+    if (!this.active || this.pendingOfficialGeneration !== null) return;
     this.engines.dom.rescan?.();
     this.engines.svg.rescan?.();
   }
@@ -256,18 +262,19 @@ export class ThemeController {
       this.officialRecipeKeys = keys;
     }
     if (this.officialFailures >= MAX_OFFICIAL_ATTEMPTS || !probe.capable) return 'unavailable';
-    this.deactivate();
+    // Keep an active transform painted while a candidate loads. Sampling hides it
+    // only within one task, so a failed retry never exposes the light page.
     const candidates = officialThemeCandidates(probe);
     for (const [index, recipes] of candidates.entries()) {
       // The previous candidate may have overlapped a site/SPA theme change.
       if (index > 0 && this.sampleAuthoredTheme().kind !== 'light') return 'failed';
-      this.pendingOfficialGeneration = generation;
+      this.setPendingOfficialGeneration(generation);
       for (const recipe of recipes) {
         if (recipe.type === 'stylesheet') this.officialStylesheetLoads.add(recipe.link);
       }
       this.mutateAuthoredTheme(() => this.officialTheme.activate(recipes));
       if (!this.officialTheme.isApplied()) {
-        this.pendingOfficialGeneration = null;
+        this.setPendingOfficialGeneration(null);
         continue;
       }
       await this.officialTheme.settle?.(signal);
@@ -277,8 +284,9 @@ export class ThemeController {
       if (!this.isCurrentProbe(generation)) return 'failed';
       const after = this.sampleAuthoredTheme();
       if (officialThemeLooksApplied(after)) {
+        this.deactivate();
         this.officialFailures = 0;
-        this.pendingOfficialGeneration = null;
+        this.setPendingOfficialGeneration(null);
         this.setStatus('official-dark', 'official-theme-activated');
         return 'applied';
       }
@@ -298,11 +306,17 @@ export class ThemeController {
       keys.every((key, index) => key === this.officialRecipeKeys[index]);
   }
 
+  private setPendingOfficialGeneration(generation: number | null): void {
+    this.pendingOfficialGeneration = generation;
+    this.engines.dom.setMappingPaused?.(generation !== null);
+  }
+
   private releaseOfficialTheme(): void {
-    this.pendingOfficialGeneration = null;
-    if (this.officialTheme.isApplied()) {
-      this.mutateAuthoredTheme(() => this.officialTheme.restore());
-    }
+    const applied = this.officialTheme.isApplied();
+    if (applied) this.mutateAuthoredTheme(() => this.officialTheme.restore());
+    // Resume only after rollback, so observers/idle work never read candidate CSS.
+    this.setPendingOfficialGeneration(null);
+    if (applied) this.rescan();
   }
 
   private mutateAuthoredTheme(run: () => void): void {
